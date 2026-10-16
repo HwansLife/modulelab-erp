@@ -1,0 +1,1739 @@
+<title>모듈랩 ERP</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.min.js"></script>
+
+<style>
+/*
+  Layout: sticky topbar + sidebar nav + scrollable main content
+  Palette: navy-blue industrial, high-contrast, RC/precision-parts feel
+*/
+:root {
+  /* Color tokens */
+  --bg:        #f0f2f5;
+  --surface:   #ffffff;
+  --surface2:  #f7f8fa;
+  --border:    #dde1e9;
+  --fg:        #111827;
+  --fg-sub:    #6b7280;
+  --fg-faint:  #9ca3af;
+  --accent:    #1d4ed8;
+  --accent-mid:#2563eb;
+  --accent-lt: #eff6ff;
+  --accent-dk: #1e3a8a;
+  --success:   #16a34a;
+  --success-lt:#f0fdf4;
+  --warn:      #d97706;
+  --warn-lt:   #fffbeb;
+  --danger:    #dc2626;
+  --danger-lt: #fef2f2;
+  --code-bg:   #1e2433;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:        #0d1117;
+    --surface:   #161b22;
+    --surface2:  #1c2230;
+    --border:    #2d3748;
+    --fg:        #e8edf5;
+    --fg-sub:    #8b949e;
+    --fg-faint:  #6b7280;
+    --accent:    #3b82f6;
+    --accent-mid:#60a5fa;
+    --accent-lt: #1e3a5f;
+    --accent-dk: #93c5fd;
+    --success:   #22c55e;
+    --success-lt:#052e16;
+    --warn:      #fbbf24;
+    --warn-lt:   #2d1b00;
+    --danger:    #f87171;
+    --danger-lt: #2d0707;
+    --code-bg:   #0d1117;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:        #0d1117;
+  --surface:   #161b22;
+  --surface2:  #1c2230;
+  --border:    #2d3748;
+  --fg:        #e8edf5;
+  --fg-sub:    #8b949e;
+  --fg-faint:  #6b7280;
+  --accent:    #3b82f6;
+  --accent-mid:#60a5fa;
+  --accent-lt: #1e3a5f;
+  --accent-dk: #93c5fd;
+  --success:   #22c55e;
+  --success-lt:#052e16;
+  --warn:      #fbbf24;
+  --warn-lt:   #2d1b00;
+  --danger:    #f87171;
+  --danger-lt: #2d0707;
+  --code-bg:   #0d1117;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  padding-left: max(0px, env(safe-area-inset-left, 0px));
+  padding-right: max(0px, env(safe-area-inset-right, 0px));
+}
+
+/* ── Top bar ── */
+.topbar {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 100;
+  background: var(--accent-dk);
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  flex-shrink: 0;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--accent-dk);
+  z-index: 101;
+}
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.brand-logo {
+  width: 32px; height: 32px;
+  background: var(--accent-mid);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: #fff;
+  letter-spacing: -0.5px;
+}
+.brand-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.03em;
+}
+.brand-sub {
+  font-size: 10px;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.topbar-spacer { flex: 1; }
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.topbar-btn {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: #fff;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.topbar-btn:hover { background: rgba(255,255,255,0.22); }
+.topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.65);
+}
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  flex-shrink: 0;
+}
+.status-dot.offline { background: #f87171; }
+
+/* ── Main layout ── */
+.layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+@media (max-width: 640px) {
+  .sidebar { display: none; }
+}
+.nav-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  padding: 12px 10px 4px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--fg-sub);
+  transition: background 0.12s, color 0.12s;
+  border: none;
+  background: none;
+  font-family: inherit;
+  width: 100%;
+  text-align: left;
+}
+.nav-item:hover { background: var(--surface2); color: var(--fg); }
+.nav-item.active {
+  background: var(--accent-lt);
+  color: var(--accent);
+  font-weight: 600;
+}
+.nav-icon { width: 16px; text-align: center; font-size: 14px; flex-shrink: 0; }
+.nav-badge {
+  margin-left: auto;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* ── Main content ── */
+.main {
+  flex: 1;
+  overflow-y: auto;
+  min-width: 0;
+  padding: 24px max(16px, env(safe-area-inset-right, 0px)) 60px max(20px, 20px);
+}
+
+/* Panels */
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* Page heading */
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.page-title { font-size: 20px; font-weight: 700; text-wrap: balance; }
+.page-sub { font-size: 13px; color: var(--fg-sub); margin-top: 2px; }
+
+/* Action button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-outline {
+  background: none;
+  border: 1.5px solid var(--border);
+  color: var(--fg);
+}
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-success { background: var(--success); color: #fff; }
+
+/* ── KPI row ── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-sub);
+  margin-bottom: 6px;
+}
+.kpi-value {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  line-height: 1.1;
+}
+.kpi-value.accent { color: var(--accent); }
+.kpi-value.success { color: var(--success); }
+.kpi-value.warn { color: var(--warn); }
+.kpi-delta {
+  font-size: 11px;
+  color: var(--fg-faint);
+  margin-top: 4px;
+}
+
+/* ── Section card ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.card-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+.card-body { padding: 18px; }
+.card-body-p0 { padding: 0; }
+
+/* ── Table ── */
+.tbl-wrap { overflow-x: auto; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 500px;
+}
+th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-sub);
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface2); }
+.td-mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+.td-right { text-align: right; }
+.td-center { text-align: center; }
+
+/* ── Status badge ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-blue { background: var(--accent-lt); color: var(--accent); }
+.badge-green { background: var(--success-lt); color: var(--success); }
+.badge-yellow { background: var(--warn-lt); color: var(--warn); }
+.badge-red { background: var(--danger-lt); color: var(--danger); }
+.badge-gray { background: var(--surface2); color: var(--fg-sub); }
+
+/* ── Chart container ── */
+.chart-wrap {
+  position: relative;
+  height: 220px;
+}
+
+/* ── Form overlay ── */
+.overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.overlay.open { display: flex; }
+.overlay-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.overlay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.overlay-title { font-size: 15px; font-weight: 700; }
+.overlay-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--fg-sub);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+.overlay-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.overlay-foot { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Form controls */
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 12px; font-weight: 600; color: var(--fg-sub); }
+.field input, .field select, .field textarea {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--fg);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  border-color: var(--accent);
+}
+.field textarea { resize: vertical; min-height: 72px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--fg-sub);
+}
+.empty-icon { font-size: 36px; margin-bottom: 12px; }
+.empty-title { font-size: 15px; font-weight: 600; color: var(--fg); margin-bottom: 6px; }
+.empty-desc { font-size: 13px; max-width: 300px; margin: 0 auto 16px; }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: max(24px, env(safe-area-inset-bottom, 24px));
+  right: max(24px, env(safe-area-inset-right, 24px));
+  background: var(--fg);
+  color: var(--bg);
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 300;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
+/* Loading spinner */
+.spinner {
+  width: 32px; height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  margin: 32px auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Responsive mobile nav */
+.mobile-nav {
+  display: none;
+  position: fixed;
+  bottom: env(safe-area-inset-bottom, 0px);
+  left: 0; right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  z-index: 90;
+  padding: 6px 0 max(6px, env(safe-area-inset-bottom, 6px));
+}
+@media (max-width: 640px) {
+  .mobile-nav { display: flex; }
+  .main { padding-bottom: 80px; }
+}
+.mobile-nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--fg-faint);
+  font-size: 9px;
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  transition: color 0.15s;
+}
+.mobile-nav-btn .mn-icon { font-size: 18px; }
+.mobile-nav-btn.active { color: var(--accent); }
+
+/* Supabase connect banner */
+.connect-banner {
+  background: var(--accent-lt);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.connect-banner-text { font-size: 13px; flex: 1; min-width: 200px; }
+.connect-banner-text strong { color: var(--accent); }
+
+/* Dev project kanban */
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+.kanban-col { display: flex; flex-direction: column; gap: 8px; }
+.kanban-col-head {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-sub);
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--surface2);
+  text-align: center;
+}
+.kanban-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+.kanban-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.kanban-item-name { font-weight: 600; margin-bottom: 4px; }
+.kanban-item-date { color: var(--fg-faint); font-size: 11px; }
+</style>
+
+<!-- Top bar -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <div class="brand-logo">ML</div>
+    <div>
+      <div class="brand-name">MODULE-LAB</div>
+      <div class="brand-sub">경영관리 시스템</div>
+    </div>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-actions">
+    <div class="topbar-status">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">연결 중...</span>
+    </div>
+    <button class="topbar-btn" onclick="syncAll()">↻ 새로고침</button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="nav-section-label">현황</div>
+    <button class="nav-item active" onclick="showPanel('overview')">
+      <span class="nav-icon">📊</span> 대시보드
+    </button>
+
+    <div class="nav-section-label">운영</div>
+    <button class="nav-item" onclick="showPanel('inventory')">
+      <span class="nav-icon">📦</span> 재고 관리
+      <span class="nav-badge" id="nav-stock-badge" hidden>!</span>
+    </button>
+    <button class="nav-item" onclick="showPanel('orders')">
+      <span class="nav-icon">🛒</span> 발주 관리
+    </button>
+    <button class="nav-item" onclick="showPanel('sales')">
+      <span class="nav-icon">💰</span> 매출 현황
+    </button>
+
+    <div class="nav-section-label">관리</div>
+    <button class="nav-item" onclick="showPanel('partners')">
+      <span class="nav-icon">🤝</span> 거래처
+    </button>
+    <button class="nav-item" onclick="showPanel('expenses')">
+      <span class="nav-icon">🧾</span> 비용 정산
+    </button>
+    <button class="nav-item" onclick="showPanel('dev')">
+      <span class="nav-icon">🔧</span> 제품 개발
+    </button>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main" id="main">
+
+    <!-- ── 대시보드 ── -->
+    <section class="panel active" id="panel-overview">
+      <div class="page-head">
+        <div>
+          <div class="page-title">대시보드</div>
+          <div class="page-sub" id="overview-date">로딩 중...</div>
+        </div>
+        <button class="btn btn-primary" onclick="showPanel('sales');openOverlay('overlay-sale')">+ 매출 입력</button>
+      </div>
+
+      <div class="kpi-row" id="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-label">이달 매출</div>
+          <div class="kpi-value success" id="kpi-revenue">—</div>
+          <div class="kpi-delta">이번 달 누적</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">제품 종류</div>
+          <div class="kpi-value accent" id="kpi-products">—</div>
+          <div class="kpi-delta">등록된 제품</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">거래처</div>
+          <div class="kpi-value" id="kpi-partners">—</div>
+          <div class="kpi-delta">협력업체 포함</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">개발 중</div>
+          <div class="kpi-value warn" id="kpi-dev">—</div>
+          <div class="kpi-delta">진행 중인 개발</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;" class="overview-grid">
+        <div class="card">
+          <div class="card-head"><span class="card-title">최근 매출 (6개월)</span></div>
+          <div class="card-body">
+            <div class="chart-wrap"><canvas id="chart-sales"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="card-title">채널별 매출</span></div>
+          <div class="card-body">
+            <div class="chart-wrap"><canvas id="chart-channel"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">최근 주문</span>
+          <button class="btn btn-outline btn-sm" onclick="showPanel('sales')">전체 보기</button>
+        </div>
+        <div class="card-body-p0 tbl-wrap">
+          <table>
+            <thead><tr><th>채널</th><th>제품</th><th>수량</th><th class="td-right">금액</th><th>날짜</th></tr></thead>
+            <tbody id="recent-sales-tbody">
+              <tr><td colspan="5"><div class="spinner"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 재고 관리 ── -->
+    <section class="panel" id="panel-inventory">
+      <div class="page-head">
+        <div>
+          <div class="page-title">재고 관리</div>
+          <div class="page-sub">제품별 현재고 · 단가 관리</div>
+        </div>
+        <button class="btn btn-primary" onclick="openOverlay('overlay-product')">+ 제품 등록</button>
+      </div>
+      <div class="card">
+        <div class="card-body-p0 tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th><th>제품명</th><th>카테고리</th>
+                <th class="td-right">원가</th><th class="td-right">판매가</th>
+                <th class="td-right">재고</th><th>액션</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-tbody">
+              <tr><td colspan="7"><div class="spinner"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 발주 관리 ── -->
+    <section class="panel" id="panel-orders">
+      <div class="page-head">
+        <div>
+          <div class="page-title">발주 관리</div>
+          <div class="page-sub">협력업체 발주 현황</div>
+        </div>
+        <button class="btn btn-primary" onclick="openOverlay('overlay-order')">+ 발주 등록</button>
+      </div>
+      <div class="card">
+        <div class="card-body-p0 tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>발주번호</th><th>거래처</th><th>발주일</th>
+                <th>납기요청</th><th class="td-right">금액</th><th>상태</th><th>액션</th>
+              </tr>
+            </thead>
+            <tbody id="orders-tbody">
+              <tr><td colspan="7"><div class="spinner"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 매출 현황 ── -->
+    <section class="panel" id="panel-sales">
+      <div class="page-head">
+        <div>
+          <div class="page-title">매출 현황</div>
+          <div class="page-sub">채널별 주문 · 매출 기록</div>
+        </div>
+        <button class="btn btn-primary" onclick="openOverlay('overlay-sale')">+ 매출 입력</button>
+      </div>
+      <div class="card">
+        <div class="card-body-p0 tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>채널</th><th>제품</th><th>수량</th>
+                <th class="td-right">단가</th><th class="td-right">금액</th>
+                <th>날짜</th><th>메모</th>
+              </tr>
+            </thead>
+            <tbody id="sales-tbody">
+              <tr><td colspan="7"><div class="spinner"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 거래처 ── -->
+    <section class="panel" id="panel-partners">
+      <div class="page-head">
+        <div>
+          <div class="page-title">거래처 관리</div>
+          <div class="page-sub">공급업체 · 협력업체 · 고객사</div>
+        </div>
+        <button class="btn btn-primary" onclick="openOverlay('overlay-partner')">+ 거래처 등록</button>
+      </div>
+      <div class="card">
+        <div class="card-body-p0 tbl-wrap">
+          <table>
+            <thead>
+              <tr><th>거래처명</th><th>유형</th><th>담당자</th><th>연락처</th><th>이메일</th><th>메모</th></tr>
+            </thead>
+            <tbody id="partners-tbody">
+              <tr><td colspan="6"><div class="spinner"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 비용 정산 ── -->
+    <section class="panel" id="panel-expenses">
+      <div class="page-head">
+        <div>
+          <div class="page-title">비용 정산</div>
+          <div class="page-sub">항목별 비용 추적</div>
+        </div>
+        <button class="btn btn-primary" onclick="openOverlay('overlay-expense')">+ 비용 입력</button>
+      </div>
+      <div class="kpi-row" id="expense-kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-label">이달 비용</div>
+          <div class="kpi-value warn" id="kpi-exp-month">—</div>
+          <div class="kpi-delta">이번 달 지출</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">이달 매출</div>
+          <div class="kpi-value success" id="kpi-exp-rev">—</div>
+          <div class="kpi-delta">이번 달 매출</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">순이익 (추정)</div>
+          <div class="kpi-value accent" id="kpi-profit">—</div>
+          <div class="kpi-delta">매출 - 비용</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body-p0 tbl-wrap">
+          <table>
+            <thead>
+              <tr><th>날짜</th><th>카테고리</th><th>내용</th><th class="td-right">금액</th><th>메모</th></tr>
+            </thead>
+            <tbody id="expenses-tbody">
+              <tr><td colspan="5"><div class="spinner"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 제품 개발 ── -->
+    <section class="panel" id="panel-dev">
+      <div class="page-head">
+        <div>
+          <div class="page-title">제품 개발 현황</div>
+          <div class="page-sub">아이디어 → 양산까지 진행상황</div>
+        </div>
+        <button class="btn btn-primary" onclick="openOverlay('overlay-dev')">+ 개발 등록</button>
+      </div>
+      <div class="kanban" id="dev-kanban"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Mobile bottom nav -->
+<nav class="mobile-nav">
+  <button class="mobile-nav-btn active" onclick="showPanel('overview')">
+    <span class="mn-icon">📊</span>대시보드
+  </button>
+  <button class="mobile-nav-btn" onclick="showPanel('inventory')">
+    <span class="mn-icon">📦</span>재고
+  </button>
+  <button class="mobile-nav-btn" onclick="showPanel('sales')">
+    <span class="mn-icon">💰</span>매출
+  </button>
+  <button class="mobile-nav-btn" onclick="showPanel('partners')">
+    <span class="mn-icon">🤝</span>거래처
+  </button>
+  <button class="mobile-nav-btn" onclick="showPanel('dev')">
+    <span class="mn-icon">🔧</span>개발
+  </button>
+</nav>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- ── Overlays ── -->
+
+<!-- 제품 등록 -->
+<div class="overlay" id="overlay-product">
+  <div class="overlay-card">
+    <div class="overlay-head">
+      <span class="overlay-title">제품 등록</span>
+      <button class="overlay-close" onclick="closeOverlay('overlay-product')">✕</button>
+    </div>
+    <div class="overlay-body">
+      <div class="field-row">
+        <div class="field"><label>제품명 *</label><input id="p-name" placeholder="예: TRX4 자석마운트"></div>
+        <div class="field"><label>SKU</label><input id="p-sku" placeholder="ML-001"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>카테고리</label>
+          <select id="p-cat">
+            <option>마운트류</option><option>스프링</option><option>스키드플레이트</option>
+            <option>서보마운트</option><option>기타부품</option>
+          </select>
+        </div>
+        <div class="field"><label>초기재고</label><input id="p-stock" type="number" placeholder="0"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>원가 (₩)</label><input id="p-cost" type="number" placeholder="0"></div>
+        <div class="field"><label>판매가 (₩)</label><input id="p-sell" type="number" placeholder="0"></div>
+      </div>
+      <div class="field"><label>메모</label><textarea id="p-memo" placeholder="추가 정보..."></textarea></div>
+    </div>
+    <div class="overlay-foot">
+      <button class="btn btn-outline" onclick="closeOverlay('overlay-product')">취소</button>
+      <button class="btn btn-primary" onclick="saveProduct()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 발주 등록 -->
+<div class="overlay" id="overlay-order">
+  <div class="overlay-card">
+    <div class="overlay-head">
+      <span class="overlay-title">발주 등록</span>
+      <button class="overlay-close" onclick="closeOverlay('overlay-order')">✕</button>
+    </div>
+    <div class="overlay-body">
+      <div class="field-row">
+        <div class="field"><label>발주번호</label><input id="o-num" placeholder="PO-2026-001"></div>
+        <div class="field"><label>거래처 *</label><select id="o-partner"><option value="">선택...</option></select></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>발주일</label><input id="o-date" type="date"></div>
+        <div class="field"><label>납기요청일</label><input id="o-due" type="date"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>총 금액 (₩)</label><input id="o-amount" type="number" placeholder="0"></div>
+        <div class="field"><label>상태</label>
+          <select id="o-status">
+            <option value="pending">발주대기</option>
+            <option value="received">입고완료</option>
+            <option value="cancelled">취소</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>메모</label><textarea id="o-memo"></textarea></div>
+    </div>
+    <div class="overlay-foot">
+      <button class="btn btn-outline" onclick="closeOverlay('overlay-order')">취소</button>
+      <button class="btn btn-primary" onclick="saveOrder()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 매출 입력 -->
+<div class="overlay" id="overlay-sale">
+  <div class="overlay-card">
+    <div class="overlay-head">
+      <span class="overlay-title">매출 입력</span>
+      <button class="overlay-close" onclick="closeOverlay('overlay-sale')">✕</button>
+    </div>
+    <div class="overlay-body">
+      <div class="field-row">
+        <div class="field"><label>채널 *</label>
+          <select id="s-channel">
+            <option>스마트스토어</option><option>Etsy</option><option>eBay</option>
+            <option>오프라인</option><option>직거래</option>
+          </select>
+        </div>
+        <div class="field"><label>제품 *</label><select id="s-product"><option value="">선택...</option></select></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>수량</label><input id="s-qty" type="number" value="1" min="1"></div>
+        <div class="field"><label>판매단가 (₩)</label><input id="s-price" type="number" placeholder="0"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>주문일</label><input id="s-date" type="date"></div>
+        <div class="field"><label>상태</label>
+          <select id="s-status">
+            <option value="paid">결제완료</option><option value="shipping">배송중</option>
+            <option value="done">완료</option><option value="cancelled">취소</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>메모</label><textarea id="s-memo" placeholder="주문번호, 특이사항 등"></textarea></div>
+    </div>
+    <div class="overlay-foot">
+      <button class="btn btn-outline" onclick="closeOverlay('overlay-sale')">취소</button>
+      <button class="btn btn-primary" onclick="saveSale()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 거래처 등록 -->
+<div class="overlay" id="overlay-partner">
+  <div class="overlay-card">
+    <div class="overlay-head">
+      <span class="overlay-title">거래처 등록</span>
+      <button class="overlay-close" onclick="closeOverlay('overlay-partner')">✕</button>
+    </div>
+    <div class="overlay-body">
+      <div class="field-row">
+        <div class="field"><label>거래처명 *</label><input id="pt-name" placeholder="상호명"></div>
+        <div class="field"><label>유형</label>
+          <select id="pt-type">
+            <option value="supplier">공급업체</option>
+            <option value="customer">고객사</option>
+            <option value="partner">협력업체</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>담당자</label><input id="pt-contact" placeholder="이름"></div>
+        <div class="field"><label>연락처</label><input id="pt-phone" placeholder="010-0000-0000"></div>
+      </div>
+      <div class="field"><label>이메일</label><input id="pt-email" type="email" placeholder="example@company.com"></div>
+      <div class="field"><label>메모</label><textarea id="pt-memo"></textarea></div>
+    </div>
+    <div class="overlay-foot">
+      <button class="btn btn-outline" onclick="closeOverlay('overlay-partner')">취소</button>
+      <button class="btn btn-primary" onclick="savePartner()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 비용 입력 -->
+<div class="overlay" id="overlay-expense">
+  <div class="overlay-card">
+    <div class="overlay-head">
+      <span class="overlay-title">비용 입력</span>
+      <button class="overlay-close" onclick="closeOverlay('overlay-expense')">✕</button>
+    </div>
+    <div class="overlay-body">
+      <div class="field-row">
+        <div class="field"><label>날짜 *</label><input id="e-date" type="date"></div>
+        <div class="field"><label>카테고리</label>
+          <select id="e-cat">
+            <option>재료비</option><option>가공비</option><option>배송비</option>
+            <option>임대료</option><option>장비/공구</option><option>광고비</option>
+            <option>수수료</option><option>기타</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>내용 *</label><input id="e-desc" placeholder="비용 내용"></div>
+        <div class="field"><label>금액 (₩) *</label><input id="e-amount" type="number" placeholder="0"></div>
+      </div>
+      <div class="field"><label>메모</label><textarea id="e-memo"></textarea></div>
+    </div>
+    <div class="overlay-foot">
+      <button class="btn btn-outline" onclick="closeOverlay('overlay-expense')">취소</button>
+      <button class="btn btn-primary" onclick="saveExpense()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 개발 등록 -->
+<div class="overlay" id="overlay-dev">
+  <div class="overlay-card">
+    <div class="overlay-head">
+      <span class="overlay-title">개발 프로젝트 등록</span>
+      <button class="overlay-close" onclick="closeOverlay('overlay-dev')">✕</button>
+    </div>
+    <div class="overlay-body">
+      <div class="field"><label>프로젝트명 *</label><input id="d-name" placeholder="예: 5IVE-T 모터마운트 v2"></div>
+      <div class="field-row">
+        <div class="field"><label>상태</label>
+          <select id="d-status">
+            <option value="idea">아이디어</option>
+            <option value="design">설계중</option>
+            <option value="prototype">시제품</option>
+            <option value="testing">테스트</option>
+            <option value="done">완료</option>
+          </select>
+        </div>
+        <div class="field"><label>목표 완료일</label><input id="d-date" type="date"></div>
+      </div>
+      <div class="field"><label>메모</label><textarea id="d-memo" placeholder="개발 목표, 특이사항..."></textarea></div>
+    </div>
+    <div class="overlay-foot">
+      <button class="btn btn-outline" onclick="closeOverlay('overlay-dev')">취소</button>
+      <button class="btn btn-primary" onclick="saveDev()">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Supabase config ──────────────────────────────────────────────
+const SB_URL = 'https://mnkvtgfabydjncmawgoo.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ua3Z0Z2ZhYnlkam5jbWF3Z29vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNTczNDUsImV4cCI6MjEwNzczMzM0NX0.THwDGargBaOuSNpMWgPXE0x6UqRqvGuuUPPBVrLGNB8';
+
+const sb = supabase.createClient(SB_URL, SB_KEY);
+
+async function sbGet(table, params = '') {
+  // params 문자열을 파싱해서 Supabase JS 쿼리로 변환
+  let q = sb.from(table).select(
+    params.match(/select=([^&]+)/)?.[1]?.replace(/&.*/, '') || '*'
+  );
+  const orderM = params.match(/order=(\w+)\.(asc|desc)/);
+  if (orderM) q = q.order(orderM[1], { ascending: orderM[2] === 'asc' });
+  const limitM = params.match(/limit=(\d+)/);
+  if (limitM) q = q.limit(parseInt(limitM[1]));
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function sbPost(table, body) {
+  const { data, error } = await sb.from(table).insert(body).select();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function sbPatch(table, id, body) {
+  const { error } = await sb.from(table).update(body).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// ── State ──────────────────────────────────────────────────────
+let state = {
+  products: [], partners: [], orders: [], sales: [], expenses: [], devs: [],
+  loaded: {}
+};
+
+// ── UI helpers ─────────────────────────────────────────────────
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.mobile-nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll(`.nav-item[onclick*="${id}"], .mobile-nav-btn[onclick*="${id}"]`)
+    .forEach(b => b.classList.add('active'));
+  if (!state.loaded[id]) loadPanel(id);
+}
+
+function openOverlay(id) {
+  document.getElementById(id).classList.add('open');
+  // pre-fill dates
+  const today = new Date().toISOString().slice(0,10);
+  const dateFields = document.querySelectorAll(`#${id} input[type=date]`);
+  dateFields.forEach(f => { if (!f.value) f.value = today; });
+  // populate select dropdowns
+  if (id === 'overlay-order') populateSelect('o-partner', state.partners, 'id', 'name');
+  if (id === 'overlay-sale') populateSelect('s-product', state.products, 'id', 'name');
+}
+
+function closeOverlay(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+function populateSelect(selectId, items, valKey, labelKey) {
+  const sel = document.getElementById(selectId);
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">선택...</option>';
+  items.forEach(it => {
+    const o = document.createElement('option');
+    o.value = it[valKey]; o.textContent = it[labelKey];
+    sel.appendChild(o);
+  });
+  if (cur) sel.value = cur;
+}
+
+function toast(msg, dur = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+function fmt(n) {
+  if (n == null) return '—';
+  return Number(n).toLocaleString('ko-KR') + '원';
+}
+
+function fmtShort(n) {
+  if (n == null) return '—';
+  const v = Number(n);
+  if (v >= 1e6) return (v/1e6).toFixed(1) + '백만원';
+  if (v >= 1e4) return (v/1e4).toFixed(0) + '만원';
+  return v.toLocaleString() + '원';
+}
+
+function statusBadge(s) {
+  const map = {
+    pending: ['badge-yellow','발주대기'], received: ['badge-green','입고완료'],
+    cancelled: ['badge-red','취소'], paid: ['badge-green','결제완료'],
+    shipping: ['badge-blue','배송중'], done: ['badge-gray','완료'],
+    supplier: ['badge-blue','공급업체'], customer: ['badge-green','고객사'],
+    partner: ['badge-gray','협력업체'],
+    idea: ['badge-gray','아이디어'], design: ['badge-blue','설계중'],
+    prototype: ['badge-yellow','시제품'], testing: ['badge-yellow','테스트'],
+  };
+  const [cls, label] = map[s] || ['badge-gray', s];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function setStatus(ok) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  dot.className = 'status-dot' + (ok ? '' : ' offline');
+  txt.textContent = ok ? 'Supabase 연결됨' : '연결 실패';
+}
+
+// ── Load data ──────────────────────────────────────────────────
+async function loadPanel(id) {
+  state.loaded[id] = true;
+  try {
+    if (id === 'overview') await loadOverview();
+    if (id === 'inventory') await loadInventory();
+    if (id === 'orders') await loadOrders();
+    if (id === 'sales') await loadSales();
+    if (id === 'partners') await loadPartners();
+    if (id === 'expenses') await loadExpenses();
+    if (id === 'dev') await loadDev();
+  } catch(e) {
+    setStatus(false);
+    console.error(e);
+  }
+}
+
+async function syncAll() {
+  state.loaded = {};
+  const cur = document.querySelector('.panel.active').id.replace('panel-','');
+  await loadPanel(cur);
+  toast('데이터를 새로고침했습니다');
+}
+
+async function loadOverview() {
+  document.getElementById('overview-date').textContent =
+    new Date().toLocaleDateString('ko-KR', {year:'numeric',month:'long',day:'numeric', weekday:'long'});
+
+  const [pR, ptR, sR, dR] = await Promise.all([
+    sb.from('products').select('id,name,stock'),
+    sb.from('partners').select('id'),
+    sb.from('sales_orders').select('amount,order_date,channel,qty'),
+    sb.from('dev_projects').select('id,status'),
+  ]);
+  if (pR.error) throw new Error(pR.error.message);
+  setStatus(true);
+
+  const products = pR.data, partners = ptR.data, sales = sR.data, devs = dR.data;
+
+  const pAll = await sb.from('products').select('*').order('name', {ascending:true});
+  const ptAll = await sb.from('partners').select('*').order('name', {ascending:true});
+  state.products = pAll.data || [];
+  state.partners = ptAll.data || [];
+
+  // KPIs
+  const now = new Date();
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+  const monthSales = sales.filter(s => s.order_date >= monthStart);
+  const monthRev = monthSales.reduce((a,s) => a + (s.amount||0), 0);
+  const inProgressDevs = devs.filter(d => !['done','idea'].includes(d.status)).length;
+
+  document.getElementById('kpi-revenue').textContent = fmtShort(monthRev);
+  document.getElementById('kpi-products').textContent = products.length;
+  document.getElementById('kpi-partners').textContent = partners.length;
+  document.getElementById('kpi-dev').textContent = inProgressDevs;
+
+  // Recent sales table
+  const rsR = await sb.from('sales_orders')
+    .select('channel,amount,qty,order_date,products(name)')
+    .order('order_date', {ascending:false}).limit(6);
+  const recentSales = rsR.data || [];
+  const tbody = document.getElementById('recent-sales-tbody');
+  if (recentSales.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5">
+      <div class="empty-state">
+        <div class="empty-icon">💰</div>
+        <div class="empty-title">매출 기록 없음</div>
+        <div class="empty-desc">첫 매출을 입력해보세요</div>
+        <button class="btn btn-primary" onclick="openOverlay('overlay-sale')">+ 매출 입력</button>
+      </div></td></tr>`;
+  } else {
+    tbody.innerHTML = recentSales.map(s => `<tr>
+      <td><span class="badge badge-blue">${s.channel}</span></td>
+      <td>${s.products?.name || (s.memo && s.memo.includes('|') ? s.memo.split('|')[0].trim() : (s.memo || '—'))}</td>
+      <td class="td-center">${s.qty}</td>
+      <td class="td-right td-mono">${fmt(s.amount)}</td>
+      <td>${s.order_date}</td>
+    </tr>`).join('');
+  }
+
+  // Charts
+  drawSalesChart(sales);
+  drawChannelChart(sales);
+}
+
+function drawSalesChart(sales) {
+  const months = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({
+      label: `${d.getMonth()+1}월`,
+      key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
+      total: 0
+    });
+  }
+  sales.forEach(s => {
+    const mk = s.order_date ? s.order_date.slice(0,7) : '';
+    const m = months.find(m => m.key === mk);
+    if (m) m.total += (s.amount || 0);
+  });
+
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.getAttribute('data-theme') && matchMedia('(prefers-color-scheme:dark)').matches);
+
+  const c = document.getElementById('chart-sales');
+  if (c._chart) c._chart.destroy();
+  c._chart = new Chart(c, {
+    type: 'bar',
+    data: {
+      labels: months.map(m => m.label),
+      datasets: [{
+        label: '매출',
+        data: months.map(m => m.total),
+        backgroundColor: '#2563eb',
+        borderRadius: 5,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: isDark ? '#8b949e' : '#6b7280' } },
+        y: {
+          grid: { color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
+          ticks: {
+            color: isDark ? '#8b949e' : '#6b7280',
+            callback: v => v >= 1e4 ? (v/1e4) + '만' : v
+          }
+        }
+      }
+    }
+  });
+}
+
+function drawChannelChart(sales) {
+  const channels = {};
+  sales.forEach(s => {
+    channels[s.channel] = (channels[s.channel] || 0) + (s.amount || 0);
+  });
+  const labels = Object.keys(channels);
+  const data = Object.values(channels);
+
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (!document.documentElement.getAttribute('data-theme') && matchMedia('(prefers-color-scheme:dark)').matches);
+
+  const c = document.getElementById('chart-channel');
+  if (c._chart) c._chart.destroy();
+  if (labels.length === 0) {
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = isDark ? '#8b949e' : '#9ca3af';
+    ctx.textAlign = 'center';
+    ctx.font = '13px Noto Sans KR';
+    ctx.fillText('매출 데이터 없음', c.width/2, c.height/2);
+    return;
+  }
+  c._chart = new Chart(c, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: ['#2563eb','#16a34a','#d97706','#7c3aed','#0891b2'],
+        borderWidth: 2,
+        borderColor: isDark ? '#161b22' : '#ffffff',
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: isDark ? '#8b949e' : '#6b7280', boxWidth: 12, padding: 12, font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
+async function loadInventory() {
+  const { data: items, error } = await sb.from('products').select('*').order('name', {ascending:true});
+  if (error) throw new Error(error.message);
+  setStatus(true);
+  state.products = items;
+
+  const tbody = document.getElementById('inventory-tbody');
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+      <div class="empty-icon">📦</div>
+      <div class="empty-title">등록된 제품 없음</div>
+      <div class="empty-desc">첫 제품을 등록해보세요</div>
+      <button class="btn btn-primary" onclick="openOverlay('overlay-product')">+ 제품 등록</button>
+    </div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = items.map(p => {
+    const stockBadge = p.stock === 0
+      ? `<span class="badge badge-red">${p.stock}</span>`
+      : p.stock < 5
+        ? `<span class="badge badge-yellow">${p.stock}</span>`
+        : `<span class="badge badge-green">${p.stock}</span>`;
+    return `<tr>
+      <td class="td-mono">${p.sku || '—'}</td>
+      <td><strong>${p.name}</strong></td>
+      <td>${p.category || '—'}</td>
+      <td class="td-right td-mono">${fmt(p.cost_price)}</td>
+      <td class="td-right td-mono">${fmt(p.sell_price)}</td>
+      <td class="td-center">${stockBadge}</td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="adjustStock(${p.id},'${p.name}',${p.stock})">재고조정</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // low stock badge
+  const low = items.filter(p => p.stock !== null && p.stock < 3).length;
+  const badge = document.getElementById('nav-stock-badge');
+  if (low > 0) { badge.textContent = low; badge.hidden = false; }
+  else badge.hidden = true;
+}
+
+async function loadOrders() {
+  const { data: items, error } = await sb.from('purchase_orders')
+    .select('*,partners(name)').order('order_date', {ascending:false});
+  if (error) throw new Error(error.message);
+  setStatus(true);
+
+  const tbody = document.getElementById('orders-tbody');
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+      <div class="empty-icon">🛒</div>
+      <div class="empty-title">발주 없음</div>
+      <button class="btn btn-primary" onclick="openOverlay('overlay-order')">+ 발주 등록</button>
+    </div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = items.map(o => `<tr>
+    <td class="td-mono">${o.po_number || '—'}</td>
+    <td>${o.partners?.name || '—'}</td>
+    <td>${o.order_date || '—'}</td>
+    <td>${o.delivery_date || '—'}</td>
+    <td class="td-right td-mono">${fmt(o.total_amount)}</td>
+    <td>${statusBadge(o.status)}</td>
+    <td>
+      ${o.status === 'pending' ? `<button class="btn btn-success btn-sm" onclick="receiveOrder(${o.id})">입고</button>` : ''}
+    </td>
+  </tr>`).join('');
+}
+
+async function loadSales() {
+  const { data: items, error } = await sb.from('sales_orders')
+    .select('*,products(name)').order('order_date', {ascending:false}).limit(100);
+  if (error) throw new Error(error.message);
+  setStatus(true);
+
+  const tbody = document.getElementById('sales-tbody');
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+      <div class="empty-icon">💰</div>
+      <div class="empty-title">매출 기록 없음</div>
+      <button class="btn btn-primary" onclick="openOverlay('overlay-sale')">+ 매출 입력</button>
+    </div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = items.map(s => `<tr>
+    <td><span class="badge badge-blue">${s.channel}</span></td>
+    <td>${s.products?.name || (s.memo && s.memo.includes('|') ? s.memo.split('|')[0].trim() : (s.memo || '—'))}</td>
+    <td class="td-center">${s.qty}</td>
+    <td class="td-right td-mono">${fmt(s.unit_price)}</td>
+    <td class="td-right td-mono">${fmt(s.amount)}</td>
+    <td>${s.order_date || '—'}</td>
+    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.memo && s.memo.includes('|') ? s.memo.split('|')[1].trim() : (s.memo || '')}</td>
+  </tr>`).join('');
+}
+
+async function loadPartners() {
+  const { data: items, error } = await sb.from('partners').select('*').order('name', {ascending:true});
+  if (error) throw new Error(error.message);
+  setStatus(true);
+  state.partners = items;
+
+  const tbody = document.getElementById('partners-tbody');
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">
+      <div class="empty-icon">🤝</div>
+      <div class="empty-title">등록된 거래처 없음</div>
+      <button class="btn btn-primary" onclick="openOverlay('overlay-partner')">+ 거래처 등록</button>
+    </div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = items.map(p => `<tr>
+    <td><strong>${p.name}</strong></td>
+    <td>${statusBadge(p.type)}</td>
+    <td>${p.contact || '—'}</td>
+    <td>${p.phone || '—'}</td>
+    <td>${p.email || '—'}</td>
+    <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.memo || ''}</td>
+  </tr>`).join('');
+}
+
+async function loadExpenses() {
+  const now = new Date();
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+
+  const [eR, sR] = await Promise.all([
+    sb.from('expenses').select('*').order('date', {ascending:false}),
+    sb.from('sales_orders').select('amount,order_date')
+  ]);
+  if (eR.error) throw new Error(eR.error.message);
+  setStatus(true);
+  const items = eR.data || [], salesAll = sR.data || [];
+
+  const monthExp = items.filter(e => e.date >= monthStart).reduce((a,e) => a + (e.amount||0), 0);
+  const monthRev = salesAll.filter(s => s.order_date >= monthStart).reduce((a,s) => a + (s.amount||0), 0);
+  document.getElementById('kpi-exp-month').textContent = fmtShort(monthExp);
+  document.getElementById('kpi-exp-rev').textContent = fmtShort(monthRev);
+  document.getElementById('kpi-profit').textContent = fmtShort(monthRev - monthExp);
+
+  const tbody = document.getElementById('expenses-tbody');
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">
+      <div class="empty-icon">🧾</div>
+      <div class="empty-title">비용 기록 없음</div>
+      <button class="btn btn-primary" onclick="openOverlay('overlay-expense')">+ 비용 입력</button>
+    </div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = items.map(e => `<tr>
+    <td>${e.date}</td>
+    <td><span class="badge badge-gray">${e.category || '—'}</span></td>
+    <td>${e.description || '—'}</td>
+    <td class="td-right td-mono">${fmt(e.amount)}</td>
+    <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.memo || ''}</td>
+  </tr>`).join('');
+}
+
+async function loadDev() {
+  const { data: items, error } = await sb.from('dev_projects').select('*').order('created_at', {ascending:false});
+  if (error) throw new Error(error.message);
+  setStatus(true);
+  state.devs = items;
+
+  const stages = [
+    { key: 'idea',      label: '아이디어' },
+    { key: 'design',    label: '설계중' },
+    { key: 'prototype', label: '시제품' },
+    { key: 'testing',   label: '테스트' },
+    { key: 'done',      label: '완료' },
+  ];
+
+  const kanban = document.getElementById('dev-kanban');
+  if (items.length === 0) {
+    kanban.innerHTML = `<div style="grid-column:1/-1"><div class="empty-state">
+      <div class="empty-icon">🔧</div>
+      <div class="empty-title">개발 프로젝트 없음</div>
+      <button class="btn btn-primary" onclick="openOverlay('overlay-dev')">+ 개발 등록</button>
+    </div></div>`;
+    return;
+  }
+
+  kanban.innerHTML = stages.map(st => {
+    const stItems = items.filter(d => d.status === st.key);
+    return `<div class="kanban-col">
+      <div class="kanban-col-head">${st.label} (${stItems.length})</div>
+      ${stItems.length === 0
+        ? `<div style="color:var(--fg-faint);font-size:12px;text-align:center;padding:8px">—</div>`
+        : stItems.map(d => `<div class="kanban-item">
+            <div class="kanban-item-name">${d.name}</div>
+            ${d.target_date ? `<div class="kanban-item-date">목표: ${d.target_date}</div>` : ''}
+            ${d.memo ? `<div class="kanban-item-date">${d.memo.slice(0,40)}...</div>` : ''}
+          </div>`).join('')
+      }
+    </div>`;
+  }).join('');
+}
+
+// ── Save handlers ──────────────────────────────────────────────
+async function saveProduct() {
+  const name = document.getElementById('p-name').value.trim();
+  if (!name) { toast('제품명을 입력하세요'); return; }
+  try {
+    await sbPost('products', {
+      name,
+      sku: document.getElementById('p-sku').value.trim() || null,
+      category: document.getElementById('p-cat').value,
+      stock: parseInt(document.getElementById('p-stock').value) || 0,
+      cost_price: parseInt(document.getElementById('p-cost').value) || 0,
+      sell_price: parseInt(document.getElementById('p-sell').value) || 0,
+      memo: document.getElementById('p-memo').value.trim() || null,
+    });
+    closeOverlay('overlay-product');
+    state.loaded.inventory = false;
+    await loadInventory();
+    toast('제품이 등록되었습니다 ✓');
+    // reset
+    ['p-name','p-sku','p-stock','p-cost','p-sell','p-memo'].forEach(id => document.getElementById(id).value = '');
+  } catch(e) { toast('오류: ' + e.message); }
+}
+
+async function saveOrder() {
+  if (!document.getElementById('o-partner').value) { toast('거래처를 선택하세요'); return; }
+  try {
+    await sbPost('purchase_orders', {
+      po_number: document.getElementById('o-num').value.trim() || null,
+      partner_id: parseInt(document.getElementById('o-partner').value),
+      order_date: document.getElementById('o-date').value,
+      delivery_date: document.getElementById('o-due').value || null,
+      total_amount: parseInt(document.getElementById('o-amount').value) || 0,
+      status: document.getElementById('o-status').value,
+      memo: document.getElementById('o-memo').value.trim() || null,
+    });
+    closeOverlay('overlay-order');
+    state.loaded.orders = false;
+    await loadOrders();
+    toast('발주가 등록되었습니다 ✓');
+  } catch(e) { toast('오류: ' + e.message); }
+}
+
+async function saveSale() {
+  const qty = parseInt(document.getElementById('s-qty').value) || 1;
+  const price = parseInt(document.getElementById('s-price').value) || 0;
+  try {
+    await sbPost('sales_orders', {
+      channel: document.getElementById('s-channel').value,
+      product_id: parseInt(document.getElementById('s-product').value) || null,
+      qty,
+      unit_price: price,
+      amount: qty * price,
+      order_date: document.getElementById('s-date').value,
+      status: document.getElementById('s-status').value,
+      memo: document.getElementById('s-memo').value.trim() || null,
+    });
+    closeOverlay('overlay-sale');
+    state.loaded.sales = false;
+    state.loaded.overview = false;
+    if (document.getElementById('panel-sales').classList.contains('active')) await loadSales();
+    if (document.getElementById('panel-overview').classList.contains('active')) await loadOverview();
+    toast('매출이 기록되었습니다 ✓');
+  } catch(e) { toast('오류: ' + e.message); }
+}
+
+async function savePartner() {
+  const name = document.getElementById('pt-name').value.trim();
+  if (!name) { toast('거래처명을 입력하세요'); return; }
+  try {
+    await sbPost('partners', {
+      name,
+      type: document.getElementById('pt-type').value,
+      contact: document.getElementById('pt-contact').value.trim() || null,
+      phone: document.getElementById('pt-phone').value.trim() || null,
+      email: document.getElementById('pt-email').value.trim() || null,
+      memo: document.getElementById('pt-memo').value.trim() || null,
+    });
+    closeOverlay('overlay-partner');
+    state.loaded.partners = false;
+    await loadPartners();
+    toast('거래처가 등록되었습니다 ✓');
+    ['pt-name','pt-contact','pt-phone','pt-email','pt-memo'].forEach(id => document.getElementById(id).value = '');
+  } catch(e) { toast('오류: ' + e.message); }
+}
+
+async function saveExpense() {
+  const desc = document.getElementById('e-desc').value.trim();
+  const amount = parseInt(document.getElementById('e-amount').value) || 0;
+  if (!desc || !amount) { toast('내용과 금액을 입력하세요'); return; }
+  try {
+    await sbPost('expenses', {
+      date: document.getElementById('e-date').value,
+      category: document.getElementById('e-cat').value,
+      description: desc,
+      amount,
+      memo: document.getElementById('e-memo').value.trim() || null,
+    });
+    closeOverlay('overlay-expense');
+    state.loaded.expenses = false;
+    await loadExpenses();
+    toast('비용이 기록되었습니다 ✓');
+    ['e-desc','e-amount','e-memo'].forEach(id => document.getElementById(id).value = '');
+  } catch(e) { toast('오류: ' + e.message); }
+}
+
+async function saveDev() {
+  const name = document.getElementById('d-name').value.trim();
+  if (!name) { toast('프로젝트명을 입력하세요'); return; }
+  try {
+    await sbPost('dev_projects', {
+      name,
+      status: document.getElementById('d-status').value,
+      target_date: document.getElementById('d-date').value || null,
+      memo: document.getElementById('d-memo').value.trim() || null,
+    });
+    closeOverlay('overlay-dev');
+    state.loaded.dev = false;
+    await loadDev();
+    toast('개발 프로젝트가 등록되었습니다 ✓');
+    ['d-name','d-memo','d-date'].forEach(id => document.getElementById(id).value = '');
+  } catch(e) { toast('오류: ' + e.message); }
+}
+
+async function receiveOrder(id) {
+  try {
+    await sbPatch('purchase_orders', id, { status: 'received' });
+    state.loaded.orders = false;
+    await loadOrders();
+    toast('입고 처리 완료 ✓');
+  } catch(e) { toast('오류: ' + e.message); }
+}
+
+function adjustStock(id, name, current) {
+  const qty = prompt(`[${name}] 재고 조정\n현재: ${current}개\n새 재고 수량:`);
+  if (qty === null || qty === '') return;
+  const n = parseInt(qty);
+  if (isNaN(n)) { toast('올바른 숫자를 입력하세요'); return; }
+  sbPatch('products', id, { stock: n })
+    .then(() => { state.loaded.inventory = false; loadInventory(); toast('재고가 조정되었습니다 ✓'); })
+    .catch(e => toast('오류: ' + e.message));
+}
+
+// Close overlay on backdrop click
+document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+});
+
+// ── Init ──────────────────────────────────────────────────────
+loadPanel('overview');
+</script>
