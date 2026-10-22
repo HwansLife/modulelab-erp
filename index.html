@@ -1821,7 +1821,7 @@ async function loadSales() {
       : (s.tracking_no ? `<span style="font-size:11px;color:var(--fg-faint)">${s.tracking_no}</span>` : '—');
     return `<tr>
     <td><span class="badge" style="background:${getChannelColor(s.channel)}22;color:${getChannelColor(s.channel)};border:1px solid ${getChannelColor(s.channel)}44">${s.channel}</span></td>
-    <td>${s.products?.name || (s.memo && s.memo.includes('|') ? s.memo.split('|')[0].trim() : (s.memo || '—'))}</td>
+    <td>${s.product_name || s.products?.name || (s.memo && s.memo.includes('|') ? s.memo.split('|')[0].trim() : (s.memo || '—'))}</td>
     <td class="td-center">${s.qty}</td>
     <td class="td-right td-mono">${fmt(s.unit_price)}</td>
     <td class="td-right td-mono">${fmt(s.amount)}</td>
