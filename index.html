@@ -1569,7 +1569,7 @@ async function loadOverview() {
 
   // Recent sales table
   const rsR = await sb.from('sales_orders')
-    .select('channel,amount,qty,order_date,memo,products(name)')
+    .select('channel,amount,qty,order_date,memo,product_name,products(name)')
     .order('order_date', {ascending:false}).limit(6);
   const recentSales = rsR.data || [];
   const tbody = document.getElementById('recent-sales-tbody');
