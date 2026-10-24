@@ -629,7 +629,54 @@ tr:hover td { background: var(--surface2); }
 .kanban-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 .kanban-item-name { font-weight: 600; margin-bottom: 4px; }
 .kanban-item-date { color: var(--fg-faint); font-size: 11px; }
+
+/* Login screen */
+.login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--bg);
+}
+.login-screen[hidden] { display: none; }
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.login-brand .brand-name { color: var(--fg); }
+.login-brand .brand-sub { color: var(--fg-sub); }
+.login-error { color: var(--danger); font-size: 12px; min-height: 16px; }
+.login-card .btn { justify-content: center; width: 100%; }
+.topbar-user { font-size: 12px; opacity: 0.8; }
 </style>
+
+<!-- Login -->
+<div class="login-screen" id="login-screen" hidden>
+  <form class="login-card" onsubmit="doLogin(event)">
+    <div class="login-brand">
+      <div class="brand-logo">ML</div>
+      <div>
+        <div class="brand-name">MODULE-LAB</div>
+        <div class="brand-sub">경영관리 시스템 로그인</div>
+      </div>
+    </div>
+    <div class="field"><label>이메일</label><input id="login-email" type="email" autocomplete="username" required></div>
+    <div class="field"><label>비밀번호</label><input id="login-password" type="password" autocomplete="current-password" required></div>
+    <div class="login-error" id="login-error"></div>
+    <button class="btn btn-primary" id="login-btn" type="submit">로그인</button>
+  </form>
+</div>
 
 <!-- Top bar -->
 <header class="topbar">
@@ -647,6 +694,8 @@ tr:hover td { background: var(--surface2); }
       <span id="status-text">연결 중...</span>
     </div>
     <button class="topbar-btn" onclick="syncAll()">↻ 새로고침</button>
+    <span class="topbar-user" id="topbar-user"></span>
+    <button class="topbar-btn" onclick="doLogout()">로그아웃</button>
   </div>
 </header>
 
@@ -1423,6 +1472,72 @@ async function sbPatch(table, id, body) {
   if (error) throw new Error(error.message);
 }
 
+// ── API 호출 (로그인 토큰 첨부) ───────────────────────────────────
+const API_BASE = 'https://modulelab-api.vercel.app/api';
+
+async function apiPost(path, body) {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { showLogin(); throw new Error('로그인이 필요합니다'); }
+  return fetch(`${API_BASE}/${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': 'Bearer ' + session.access_token
+    },
+    body: JSON.stringify(body)
+  });
+}
+
+// ── 로그인 ─────────────────────────────────────────────────────
+function showLogin() {
+  document.getElementById('login-screen').hidden = false;
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-email').focus();
+}
+
+async function onSignedIn(session) {
+  document.getElementById('login-screen').hidden = true;
+  document.getElementById('topbar-user').textContent = session.user.email || '';
+  state.loaded = {};
+  await loadPanel('overview');
+}
+
+async function doLogin(e) {
+  e.preventDefault();
+  const btn   = document.getElementById('login-btn');
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  btn.disabled = true;
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({
+      email:    document.getElementById('login-email').value.trim(),
+      password: document.getElementById('login-password').value
+    });
+    if (error) throw error;
+    await onSignedIn(data.session);
+  } catch (err) {
+    errEl.textContent = '로그인 실패: 이메일 또는 비밀번호를 확인하세요';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  state.loaded = {};
+  document.getElementById('topbar-user').textContent = '';
+  showLogin();
+}
+
+async function initAuth() {
+  sb.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT') showLogin();
+  });
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) await onSignedIn(session);
+  else showLogin();
+}
+
 // ── State ──────────────────────────────────────────────────────
 let state = {
   products: [], partners: [], orders: [], sales: [], expenses: [], devs: [],
@@ -1817,7 +1932,7 @@ async function loadSales() {
   tbody.innerHTML = items.map(s => {
     const canShip = ['paid','pending'].includes(s.status);
     const shipBtn = canShip
-      ? `<button class="btn btn-outline btn-sm" onclick="openShipForm(${s.id},'${s.channel}','${(s.memo||'').replace(/'/g,"\\'")}')">🚚 배송처리</button>`
+      ? `<button class="btn btn-outline btn-sm" onclick="openShipForm(${s.id},'${s.channel}','${(s.order_no||'').replace(/'/g,"\\'")}')">🚚 배송처리</button>`
       : (s.tracking_no ? `<span style="font-size:11px;color:var(--fg-faint)">${s.tracking_no}</span>` : '—');
     return `<tr>
     <td><span class="badge" style="background:${getChannelColor(s.channel)}22;color:${getChannelColor(s.channel)};border:1px solid ${getChannelColor(s.channel)}44">${s.channel}</span></td>
@@ -2246,35 +2361,36 @@ async function saveShipping() {
   const orderNo  = document.getElementById('ship-orderno').value;
 
   try {
-    // 1. Supabase 상태 업데이트
+    // 1. 채널 API로 운송장 전송 (실패하면 ERP 상태를 바꾸지 않음)
+    let sentToChannel = false;
+    if ((channel === 'imweb' || channel === 'naver') && orderNo) {
+      const path = channel === 'imweb' ? 'ship-imweb' : 'ship-naver';
+      const body = channel === 'imweb'
+        ? { order_no: orderNo, tracking_no: tracking, carrier }
+        : { product_order_id: orderNo, tracking_no: tracking, carrier };
+      const res  = await apiPost(path, body);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(`${channel} 운송장 전송 실패: ${data.error || res.status}`);
+      }
+      sentToChannel = true;
+    }
+
+    // 2. Supabase 상태 업데이트
     await sbPatch('sales_orders', shipOrderId, {
       status:      'shipping',
       tracking_no: tracking,
       carrier:     carrier
     });
 
-    // 2. 채널 API로 운송장 전송
-    const API = 'https://modulelab-api.vercel.app/api';
-    if (channel === 'imweb' && orderNo) {
-      await fetch(`${API}/ship-imweb`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_no: orderNo, tracking_no: tracking, carrier })
-      });
-    } else if (channel === 'naver' && orderNo) {
-      await fetch(`${API}/ship-naver`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_order_id: orderNo, tracking_no: tracking, carrier })
-      });
-    }
-
     closeOverlay('overlay-ship');
     state.loaded.sales    = false;
     state.loaded.overview = false;
     await loadSales();
-    toast(`배송처리 완료 ✓ [${tracking}]`);
-  } catch(e) { toast('오류: ' + e.message); }
+    toast(sentToChannel
+      ? `배송처리 완료 ✓ [${tracking}] ${channel} 전송됨`
+      : `배송처리 완료 ✓ [${tracking}] (ERP에만 저장, 채널 전송 없음)`, 3500);
+  } catch(e) { toast('오류: ' + e.message, 4000); }
 }
 
 async function receiveOrder(id) {
@@ -2508,11 +2624,7 @@ async function batchCrawl() {
   });
 
   try {
-    const res = await fetch('https://modulelab-api.vercel.app/api/crawl-product', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skus })
-    });
+    const res = await apiPost('crawl-product', { skus });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || '크롤링 실패');
 
@@ -2631,14 +2743,10 @@ async function batchRegisterImweb() {
 
   try {
     const skus = valid.map(p => p.sku);
-    const res  = await fetch('https://modulelab-api.vercel.app/api/crawl-product', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        skus,
-        action: 'register_imweb',
-        imweb_category_id: catId
-      })
+    const res  = await apiPost('crawl-product', {
+      skus,
+      action: 'register_imweb',
+      imweb_category_id: catId
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || '등록 실패');
@@ -2666,5 +2774,5 @@ document.querySelectorAll('.overlay').forEach(o => {
 });
 
 // ── Init ──────────────────────────────────────────────────────
-loadPanel('overview');
+initAuth();
 </script>
