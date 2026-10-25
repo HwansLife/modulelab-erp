@@ -987,8 +987,12 @@ tr:hover td { background: var(--surface2); }
             <input type="file" id="bulk-file" accept=".xlsx,.xls" onchange="bulkLoadFile(this.files[0])">
           </div>
           <div class="field">
-            <label>상품 이미지 폴더 (아임웹 등록 시 필요 · 상품코드 폴더 또는 상품코드_번호.jpg)</label>
-            <input type="file" id="bulk-images" webkitdirectory multiple onchange="bulkLoadImages(this.files)">
+            <label>상품 이미지 (여러 장 선택 가능 · 파일명이 상품코드로 시작하면 자동 연결, 예: AXI00005T1_01.jpg)</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="file" id="bulk-images" accept="image/*" multiple onchange="bulkLoadImages(this.files);this.value=''" style="flex:1">
+              <button class="btn btn-outline btn-sm" onclick="bulkClearImages()">이미지 비우기</button>
+            </div>
+            <div style="font-size:12px;color:var(--fg-faint)">상품코드로 시작하지 않는 이미지는 아래 표에서 상품마다 <b>＋ 이미지</b>로 추가하세요.</div>
           </div>
           <div id="bulk-info" style="font-size:13px;color:var(--fg-sub)">파일을 선택하세요.</div>
         </div>
@@ -2837,13 +2841,25 @@ function bulkNum(v) {
 }
 function bulkYes(v) { return bulkStr(v).toUpperCase() === 'Y'; }
 
-// 헤더로 양식 판별 (데이터는 4행부터: 1행 항목명, 2행 필수여부, 3행 설명)
+// 아임웹 관리자 '상품 다운로드' 파일 항목명 → 일괄등록 양식 항목명
+const BULK_IMWEB_EXPORT_ALIAS = {
+  '현재 재고수량': '재고수량', '재고번호SKU': 'SKU(재고번호)', '상품상세정보': '상품 상세정보',
+  '필수옵션명': '필수 옵션명', '선택옵션명': '선택 옵션명',
+  '네이버다음쇼핑노출용상품명': '네이버/다음 쇼핑 노출용 상품명', '최대 구매수량': '1회 구매시 최대 수량',
+  '다음쇼핑하우노출': '다음 쇼핑하우 노출 설정', '네이버쇼핑노출': '네이버 쇼핑 노출 설정',
+  '네이버페이': '네이버 페이 구매가능 설정', '톡체크아웃': '카카오페이 구매 가능 설정',
+};
+
+// 헤더로 양식 판별. start = 데이터 시작 행 (일괄등록 양식은 1행 항목명, 2행 필수여부, 3행 설명)
 function bulkDetect(aoa) {
   const r0 = (aoa[0] || []).map(bulkNorm);
   const r1 = (aoa[1] || []).map(bulkNorm);
-  if (r0[0] === '상품명' && r0[1] === '자체 상품코드') return { channel: 'imweb', header: r0 };
-  if (r0[0] === '상품 ID' && r0[1] === '상품이름')     return { channel: 'toss',  header: r0 };
-  if (r1[0] === '판매자 상품코드')                       return { channel: 'naver', header: r1 };
+  if (r0[0] === '상품명' && r0[1] === '자체 상품코드') return { channel: 'imweb', header: r0, start: 3 };
+  if (r0[0] === '상품번호' && r0[1] === '상품명') {
+    return { channel: 'imweb', header: r0.map(h => BULK_IMWEB_EXPORT_ALIAS[h] || h), start: 1, exported: true };
+  }
+  if (r0[0] === '상품 ID' && r0[1] === '상품이름')     return { channel: 'toss',  header: r0, start: 3 };
+  if (r1[0] === '판매자 상품코드')                       return { channel: 'naver', header: r1, start: 3 };
   return null;
 }
 
@@ -2859,13 +2875,16 @@ async function bulkLoadFile(file) {
 
     const cfg = BULK_CHANNELS[fmt.channel];
     bulk.channel = fmt.channel;
-    bulk.rows = aoa.slice(3)
+    bulk.rows = aoa.slice(fmt.start)
       .map(r => Object.fromEntries(fmt.header.map((h, i) => [h, r[i]])))
       .filter(o => bulkStr(o[cfg.name]) && bulkStr(o[cfg.name]) !== '샘플 상품')
-      .map(o => ({ data: o, sku: bulkStr(o[cfg.sku]), status: '' }));
+      .map(o => ({ data: o, sku: bulkStr(o[cfg.sku]), files: [], status: '' }));
 
     const notes = {
-      imweb: '아임웹 API로 바로 등록할 수 있습니다. 이미지 폴더도 선택하세요. 배송 설정과 옵션은 아임웹 기본 설정을 따릅니다.',
+      imweb: (fmt.exported
+        ? '아임웹에서 내려받은 상품 목록입니다. 상품번호가 있는 줄은 이미 아임웹에 있는 상품이라 등록하지 않고, 상품번호가 빈 줄만 새로 등록합니다. '
+        : '아임웹 API로 바로 등록할 수 있습니다. ')
+        + '이미지를 추가하세요. 배송 설정과 옵션은 아임웹 기본 설정을 따릅니다.',
       toss:  '토스는 상품 등록 API가 없어 ERP 제품에만 반영됩니다. 토스 포스에는 이 파일을 직접 올려주세요.',
       naver: '네이버 API 등록은 다음 단계에서 지원합니다. 지금은 ERP 제품에만 반영됩니다.',
     };
@@ -2884,22 +2903,39 @@ async function bulkLoadFile(file) {
   }
 }
 
+function bulkIsImage(f) { return /\.(jpe?g|png|gif|webp)$/i.test(f.name); }
+function bulkSameFile(a, b) { return a.name === b.name && a.size === b.size; }
+
+// 선택할 때마다 추가 (같은 파일은 한 번만)
 function bulkLoadImages(files) {
-  bulk.images = [...files].filter(f => /\.(jpe?g|png|gif|webp)$/i.test(f.name));
-  toast(`이미지 ${bulk.images.length}개를 불러왔습니다`);
+  const add = [...files].filter(bulkIsImage).filter(f => !bulk.images.some(g => bulkSameFile(f, g)));
+  bulk.images.push(...add);
+  toast(`이미지 ${add.length}장 추가 (전체 ${bulk.images.length}장)`);
   bulkRender();
 }
 
-// 상품코드 폴더(예: AXI00005T1, 01_AXI00005T1) 또는 파일명(AXI00005T1_01.jpg)으로 매칭
-function bulkImagesFor(sku) {
-  if (!sku) return [];
-  const up = sku.toUpperCase();
-  return bulk.images.filter(f => {
-    const segs = (f.webkitRelativePath || f.name).split('/').slice(0, -1).map(s => s.toUpperCase());
-    if (segs.some(s => s === up || s.endsWith('_' + up))) return true;
+function bulkClearImages() {
+  bulk.images = [];
+  bulk.rows.forEach(r => { r.files = []; });
+  bulkRender();
+}
+
+// 상품마다 직접 추가한 이미지
+function bulkAddRowImages(i, files) {
+  const r = bulk.rows[i];
+  r.files.push(...[...files].filter(bulkIsImage).filter(f => !r.files.some(g => bulkSameFile(f, g))));
+  bulkRender();
+}
+
+// 상품 이미지 = 직접 추가한 이미지 + 파일명이 상품코드로 시작하는 이미지(AXI00005T1_01.jpg)
+function bulkRowImages(r) {
+  const up = (r.sku || '').toUpperCase();
+  const matched = up ? bulk.images.filter(f => {
     const base = f.name.toUpperCase();
     return base.startsWith(up) && /^[_\-.]/.test(base.slice(up.length));
-  }).sort((a, b) => a.name.localeCompare(b.name));
+  }) : [];
+  const all = [...r.files, ...matched.filter(f => !r.files.some(g => bulkSameFile(f, g)))];
+  return all.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function bulkRender() {
@@ -2910,15 +2946,21 @@ function bulkRender() {
   }
   const cfg = BULK_CHANNELS[bulk.channel];
   tbody.innerHTML = bulk.rows.map((r, i) => {
-    const imgs  = bulkImagesFor(r.sku).length;
+    const imgs  = bulkRowImages(r).length;
     const stock = bulkNum(r.data[cfg.stock]);
+    const imgCell = bulk.channel === 'imweb'
+      ? `${imgs ? imgs + '장' : (bulkStr(r.data['대표이미지URL']) ? '아임웹 이미지' : '—')}
+         <label class="btn btn-outline btn-sm" style="margin-left:6px;cursor:pointer">＋ 이미지
+           <input type="file" accept="image/*" multiple hidden onchange="bulkAddRowImages(${i}, this.files)">
+         </label>`
+      : '—';
     return `<tr>
       <td>${i + 1}</td>
       <td class="td-mono">${bulkEsc(r.sku) || '<span style="color:var(--danger)">없음</span>'}</td>
       <td>${bulkEsc(r.data[cfg.name])}</td>
       <td class="td-right td-mono">${fmt(bulkNum(r.data[cfg.price]) || 0)}</td>
       <td class="td-right">${stock ?? '—'}</td>
-      <td>${imgs ? imgs + '장' : '—'}</td>
+      <td style="white-space:nowrap">${imgCell}</td>
       <td style="font-size:12px">${r.status}</td>
     </tr>`;
   }).join('');
@@ -2935,6 +2977,7 @@ function bulkErpRow(r) {
   if (price !== undefined) row.sell_price = price;
   if (stock !== undefined) row.stock = stock;
   if (bulk.channel === 'imweb') {
+    if (bulkStr(d['상품번호'])) row.imweb_product_no = bulkStr(d['상품번호']);
     const cost = bulkNum(d['원가']);
     if (cost) row.cost_price = cost;
     if (bulkStr(d['브랜드']))  row.brand  = bulkStr(d['브랜드']);
@@ -3028,21 +3071,35 @@ async function bulkRegisterImweb() {
   for (let i = 0; i < bulk.rows.length; i++) {
     const r = bulk.rows[i];
     try {
+      const existingNo = bulkStr(r.data['상품번호']);
+      if (existingNo) {
+        // 아임웹에서 내려받은 목록의 기존 상품: 등록하지 않고 ERP에만 상품번호 연결
+        if (r.sku) await bulkUpsertErp(bulkErpRow(r));
+        bulkSetStatus(i, `이미 아임웹 상품 (#${bulkEsc(existingNo)})${r.sku ? ' — ERP 연결 ✓' : ''}`);
+        continue;
+      }
       if (!r.sku) throw new Error('자체 상품코드 없음');
       if (registered[r.sku]) { bulkSetStatus(i, `이미 등록됨 (#${bulkEsc(registered[r.sku])})`); continue; }
-      if (bulkStr(r.data['필수 옵션명']) || bulkStr(r.data['선택 옵션명'])) throw new Error('옵션 상품은 아임웹에서 직접 등록하세요');
+      if (bulkYes(r.data['옵션사용']) || bulkStr(r.data['필수 옵션명']) || bulkStr(r.data['선택 옵션명'])) {
+        throw new Error('옵션 상품은 아임웹에서 직접 등록하세요');
+      }
 
       // 대표 이미지를 맨 앞으로
       const mainName = bulkStr(r.data['대표 이미지 파일명']);
-      let files = bulkImagesFor(r.sku);
-      if (!files.length) throw new Error('이미지 없음 (이미지 폴더를 선택하세요)');
+      let files = bulkRowImages(r);
       const main = files.find(f => f.name === mainName);
       if (main) files = [main, ...files.filter(f => f !== main)];
       files = files.slice(0, BULK_IMWEB_MAX_IMAGES);
 
-      bulkSetStatus(i, `이미지 업로드 중 (${files.length}장)...`);
       const urls = [];
-      for (const f of files) urls.push(await bulkUploadImage(r.sku, f));
+      if (files.length) {
+        bulkSetStatus(i, `이미지 업로드 중 (${files.length}장)...`);
+        for (const f of files) urls.push(await bulkUploadImage(r.sku, f));
+      } else if (bulkStr(r.data['대표이미지URL'])) {
+        urls.push(bulkStr(r.data['대표이미지URL']));
+      } else {
+        throw new Error('이미지 없음 (＋ 이미지로 추가하세요)');
+      }
 
       // 상세정보 HTML 속 파일명을 업로드한 이미지 주소로 교체, 비어 있으면 이미지로 채움
       let content = bulkStr(r.data['상품 상세정보']);
