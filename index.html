@@ -1014,6 +1014,24 @@ tr:hover td { background: var(--surface2); }
         <summary class="card-head" style="cursor:pointer"><span class="card-title">⚙️ 채널 설정 (처음 한 번)</span></summary>
         <div class="card-body" style="display:grid;gap:18px">
           <div>
+            <div style="font-weight:700;margin-bottom:8px">아임웹 (자사몰)</div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+              <span id="imweb-cat-status" style="font-size:13px;color:var(--fg-sub)">카테고리 목록을 불러오세요</span>
+              <button class="btn btn-outline btn-sm" onclick="imwebLoadCategories()">카테고리 불러오기</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+              <div class="field"><label>기본 카테고리</label><select id="set-imweb-category"></select></div>
+              <div class="field"><label>등록 상태 (토스·네이버 엑셀일 때)</label>
+                <select id="set-imweb-status">
+                  <option value="sale">판매중</option><option value="nosale">숨김</option>
+                </select>
+              </div>
+              <div class="field"><label>기본 무게 (kg)</label><input id="set-imweb-weight" type="number" min="0" step="0.01" placeholder="엑셀에 없을 때"></div>
+            </div>
+            <div style="font-size:12px;color:var(--fg-faint);margin-top:6px">아임웹 상품 API는 엑셀 일괄등록용 CATE 코드를 쓰지 않습니다. 엑셀 카테고리ID 칸에는 카테고리 <b>이름</b>(예: 강화옵션)이나 위 목록의 코드를 쓰세요.</div>
+          </div>
+
+          <div>
             <div style="font-weight:700;margin-bottom:8px">네이버 스마트스토어</div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
               <span id="naver-helper-status" style="font-size:13px;color:var(--fg-sub)">네이버 도우미 상태 확인 전</span>
@@ -3025,7 +3043,7 @@ async function bulkLoadFile(file) {
     info.innerHTML = `<b>${cfg.label} 양식</b> · 상품 ${bulk.rows.length}개 — ${notes[fmt.channel]}`;
     const hasRows = bulk.rows.length > 0;
     document.getElementById('bulk-erp-btn').disabled   = !hasRows;
-    document.getElementById('bulk-imweb-btn').disabled = !hasRows || fmt.channel !== 'imweb';
+    document.getElementById('bulk-imweb-btn').disabled = !hasRows;
     document.getElementById('bulk-naver-btn').disabled = !hasRows;
     document.getElementById('bulk-ebay-btn').disabled  = !hasRows;
     bulkRender();
@@ -3046,8 +3064,11 @@ const BULK_SETTING_FIELDS = {
            asGuide: 'set-naver-as-guide', originCode: 'set-naver-origin', importer: 'set-naver-importer', kcExclusion: 'set-naver-kc' },
   ebay:  { fulfillmentPolicyId: 'set-ebay-fulfillment', paymentPolicyId: 'set-ebay-payment', returnPolicyId: 'set-ebay-return',
            merchantLocationKey: 'set-ebay-location', categoryId: 'set-ebay-category', brand: 'set-ebay-brand' },
+  imweb: { categoryId: 'set-imweb-category', status: 'set-imweb-status', weight: 'set-imweb-weight' },
 };
-let bulkSettings = { naver: {}, ebay: {} };
+let bulkSettings = { naver: {}, ebay: {}, imweb: {} };
+// 목록을 API에서 불러와 채우는 select (저장된 값만 먼저 보여줌)
+const BULK_DYNAMIC_SELECTS = ['set-ebay-fulfillment', 'set-ebay-payment', 'set-ebay-return', 'set-ebay-location', 'set-imweb-category'];
 
 // 저장된 값이 목록에 없어도 선택된 채로 보이도록 select에 옵션 추가
 function bulkSetSelect(id, value, options) {
@@ -3063,7 +3084,7 @@ function bulkFillSettings() {
   for (const [ch, fields] of Object.entries(BULK_SETTING_FIELDS)) {
     for (const [k, id] of Object.entries(fields)) {
       const el = document.getElementById(id), v = bulkSettings[ch][k] ?? '';
-      if (el.tagName === 'SELECT') bulkSetSelect(id, v, ch === 'ebay' && k !== 'categoryId' ? [] : null);
+      if (el.tagName === 'SELECT') bulkSetSelect(id, v, BULK_DYNAMIC_SELECTS.includes(id) ? [] : null);
       else el.value = v;
     }
   }
@@ -3073,8 +3094,20 @@ async function bulkLoadSettings() {
   const { data, error } = await sb.from('app_settings').select('value').eq('key', 'channels').maybeSingle();
   if (error) { toast('채널 설정을 불러오지 못했습니다: ' + error.message); return; }
   const v = (data && data.value) || {};
-  bulkSettings = { naver: v.naver || {}, ebay: v.ebay || {} };
+  bulkSettings = { naver: v.naver || {}, ebay: v.ebay || {}, imweb: v.imweb || {} };
   bulkFillSettings();
+}
+
+async function imwebLoadCategories() {
+  const el = document.getElementById('imweb-cat-status');
+  el.textContent = '불러오는 중...';
+  try {
+    bulkImwebCats = null;
+    const cats = await bulkLoadImwebCats();
+    const cur  = document.getElementById('set-imweb-category').value || bulkSettings.imweb.categoryId;
+    bulkSetSelect('set-imweb-category', cur, cats.map(c => ({ id: c.code, name: `${c.path} (${c.code})` })));
+    el.textContent = `✅ 카테고리 ${cats.length}개 — 엑셀 카테고리ID 칸에는 이 목록의 이름이나 코드를 쓰면 됩니다`;
+  } catch (e) { el.textContent = '오류: ' + e.message; }
 }
 
 async function bulkSaveSettings() {
@@ -3473,58 +3506,125 @@ function bulkImwebPayload(r, urls, content) {
   return p;
 }
 
+// 아임웹 상품 API용 카테고리 목록 (엑셀 일괄등록의 CATE 코드와 다름)
+let bulkImwebCats = null;
+async function bulkLoadImwebCats() {
+  if (bulkImwebCats) return bulkImwebCats;
+  const res  = await apiPost('imweb-register', { action: 'categories' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) throw new Error(data.error || '아임웹 카테고리 조회 실패');
+  bulkImwebCats = data.categories || [];
+  return bulkImwebCats;
+}
+
+// 엑셀 일괄등록용 CATE 코드 → 카테고리 이름 (상품연동\양식\아임웹 카테고리 코드.png 기준)
+const BULK_IMWEB_CATE_NAMES = {
+  CATE26: '트라이얼', CATE23: '버기', CATE27: '트럭', CATE25: '숏코스', CATE24: '트러기', CATE28: '온로드',
+  CATE13: '마운트', CATE14: '스키드', CATE21: '강화옵션',
+  CATE3: 'TRX4', CATE6: 'SCX10-III', CATE16: 'VS4-10', CATE19: '5IVE-B', CATE20: '5IVE-T',
+};
+
+// 엑셀·설정의 카테고리 값(코드, 이름, '상위 > 하위' 경로, 일괄등록 CATE 코드) → API 카테고리 코드
+function bulkResolveImwebCats(values, cats) {
+  const codes = [], missing = [];
+  for (const v of values) {
+    const key  = v.trim().toLowerCase();
+    const name = (BULK_IMWEB_CATE_NAMES[v.trim().toUpperCase()] || '').toLowerCase();
+    const hit = cats.find(c => c.code.toLowerCase() === key)
+             || cats.find(c => c.path.toLowerCase() === key)
+             || cats.find(c => c.name.toLowerCase() === key)
+             || (name && cats.find(c => c.name.toLowerCase() === name));
+    if (hit) codes.push(hit.code); else missing.push(v);
+  }
+  return { codes, missing };
+}
+
+// 아임웹 양식이 아닌 엑셀(토스·네이버) 한 줄 → 아임웹 등록 요청 (빈 값은 ERP 제품·채널 설정으로)
+function bulkImwebPayloadGeneric(r, p, urls, content) {
+  const d = r.data, cfg = BULK_CHANNELS[bulk.channel];
+  const price = bulkNum(d[cfg.price]) ?? p.sell_price;
+  const stock = bulkNum(d[cfg.stock]) ?? p.stock ?? 0;
+  const out = {
+    name:             bulkStr(d[cfg.name]) || p.name,
+    custom_prod_code: r.sku,
+    prod_type:        'normal',
+    prod_status:      'sale',
+    images:           urls,
+    content,
+    stock_use:        true,
+    stock_no_option:  stock,
+    sku_no_option:    r.sku,
+  };
+  if (price !== undefined && price !== null) out.price = price; else out.price_none = true;
+  const brand = bulkStr(d['브랜드']) || p.brand;
+  const maker = bulkStr(d['제조사']) || brand;
+  if (brand) out.brand = brand;
+  if (maker) out.maker = maker;
+  if (bulkStr(d['카테고리코드'])) out.naver_category = bulkStr(d['카테고리코드']);
+  return out;
+}
+
 async function bulkRegisterImweb() {
-  if (bulk.channel !== 'imweb') return;
-  if (!confirm(`상품 ${bulk.rows.length}개를 아임웹에 등록합니다. 계속할까요?`)) return;
+  if (!bulk.rows.length) { toast('먼저 엑셀 파일을 올려주세요'); return; }
+  const s = bulkSettings.imweb || {};
   const btn = document.getElementById('bulk-imweb-btn');
   btn.disabled = true;
 
-  // 이미 등록된 상품은 건너뜀 (중복 등록 방지)
-  const skus = bulk.rows.map(r => r.sku).filter(Boolean);
-  const { data: existing } = await sb.from('products').select('sku,imweb_product_no').in('sku', skus);
-  const registered = Object.fromEntries((existing || []).filter(p => p.imweb_product_no).map(p => [p.sku, p.imweb_product_no]));
+  let cats, erp = {};
+  try {
+    cats = await bulkLoadImwebCats();
+    erp  = await bulkErpProducts();
+  } catch (e) {
+    toast('아임웹 준비 실패: ' + e.message, 5000);
+    btn.disabled = false;
+    return;
+  }
+  if (!confirm(`상품 ${bulk.rows.length}개를 아임웹에 등록합니다. 계속할까요?`)) { btn.disabled = false; return; }
 
   let ok = 0;
   for (let i = 0; i < bulk.rows.length; i++) {
-    const r = bulk.rows[i];
+    const r = bulk.rows[i], d = r.data, p = erp[r.sku] || {};
     try {
-      const existingNo = bulkStr(r.data['상품번호']);
+      const existingNo = bulkStr(d['상품번호']);
       if (existingNo) {
         // 아임웹에서 내려받은 목록의 기존 상품: 등록하지 않고 ERP에만 상품번호 연결
         if (r.sku) await bulkUpsertErp(bulkErpRow(r));
         bulkSetStatus(i, `이미 아임웹 상품 (#${bulkEsc(existingNo)})${r.sku ? ' — ERP 연결 ✓' : ''}`);
         continue;
       }
-      if (!r.sku) throw new Error('자체 상품코드 없음');
-      if (registered[r.sku]) { bulkSetStatus(i, `이미 등록됨 (#${bulkEsc(registered[r.sku])})`); continue; }
-      if (bulkYes(r.data['옵션사용']) || bulkStr(r.data['필수 옵션명']) || bulkStr(r.data['선택 옵션명'])) {
+      if (!r.sku) throw new Error('상품코드 없음');
+      if (p.imweb_product_no) { bulkSetStatus(i, `이미 등록됨 (#${bulkEsc(p.imweb_product_no)})`); continue; }
+      if (bulkYes(d['옵션사용']) || bulkStr(d['필수 옵션명']) || bulkStr(d['선택 옵션명']) || bulkStr(d['옵션명'])) {
         throw new Error('옵션 상품은 아임웹에서 직접 등록하세요');
       }
 
-      // 대표 이미지를 맨 앞으로
-      const mainName = bulkStr(r.data['대표 이미지 파일명']);
-      let files = bulkRowImages(r);
-      const main = files.find(f => f.name === mainName);
-      if (main) files = [main, ...files.filter(f => f !== main)];
-      files = files.slice(0, BULK_IMWEB_MAX_IMAGES);
-
-      const urls = [];
-      if (files.length) {
-        bulkSetStatus(i, `이미지 업로드 중 (${files.length}장)...`);
-        for (const f of files) urls.push(await bulkUploadImage(r.sku, f));
-      } else if (bulkStr(r.data['대표이미지URL'])) {
-        urls.push(bulkStr(r.data['대표이미지URL']));
-      } else {
-        throw new Error('이미지 없음 (＋ 이미지로 추가하세요)');
+      // 카테고리: 엑셀 값 → 없으면 채널 설정 기본값
+      const rawCats = bulkStr(d['카테고리ID']).split(/[,\n]/).map(v => v.trim()).filter(Boolean);
+      const { codes, missing } = bulkResolveImwebCats(rawCats.length ? rawCats : (s.categoryId ? [s.categoryId] : []), cats);
+      if (missing.length) {
+        throw new Error(`아임웹에 없는 카테고리: ${missing.join(', ')} — 채널 설정 → 아임웹 "카테고리 불러오기"에서 이름이나 코드를 확인하세요`);
       }
+      if (!codes.length) throw new Error('아임웹 카테고리 없음 (엑셀 카테고리ID 또는 채널 설정 기본 카테고리)');
+
+      const urls = await bulkRowImageUrls(r, i, [...bulkHttpUrls(d['대표이미지URL']), ...bulkHttpUrls(d['대표이미지']), p.image_url]);
+      if (!urls.length) throw new Error('이미지 없음 (＋ 이미지로 추가하세요)');
+      // 대표 이미지를 맨 앞으로
+      const mainName = bulkStr(d['대표 이미지 파일명'] || d['대표이미지']);
+      const mainIdx  = (r.uploaded || []).findIndex(u => u.name === mainName);
+      if (mainIdx > 0) urls.unshift(...urls.splice(mainIdx, 1));
 
       // 상세정보 HTML 속 파일명을 업로드한 이미지 주소로 교체, 비어 있으면 이미지로 채움
-      let content = bulkStr(r.data['상품 상세정보']);
-      files.forEach((f, k) => { content = content.split(f.name).join(urls[k]); });
+      let content = bulkStr(d['상품 상세정보'] || d['상세설명']) || p.description_ko || '';
+      (r.uploaded || []).forEach(u => { content = content.split(u.name).join(u.url); });
       if (!content) content = urls.map(u => `<p><img src="${u}" style="max-width:100%"></p>`).join('');
 
+      const product = bulk.channel === 'imweb' ? bulkImwebPayload(r, urls, content) : bulkImwebPayloadGeneric(r, p, urls, content);
+      product.categories = codes;
+      if (bulk.channel !== 'imweb' && s.status) product.prod_status = s.status;
+      if (product.weight === undefined && Number(s.weight) > 0) product.weight = Number(s.weight);
+
       bulkSetStatus(i, '아임웹 등록 중...');
-      const res  = await apiPost('imweb-register', { product: bulkImwebPayload(r, urls, content) });
+      const res  = await apiPost('imweb-register', { product });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) throw new Error(data.error || ('HTTP ' + res.status));
 
