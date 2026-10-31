@@ -3029,7 +3029,7 @@ async function bulkSaveSettings() {
 
 async function ebayConnect() {
   try {
-    const res  = await apiPost('ebay-auth', {});
+    const res  = await apiPost('ebay-auth', { action: 'start' });
     const data = await res.json();
     if (!data.success) throw new Error(data.error);
     window.open(data.url, '_blank');
@@ -3041,7 +3041,7 @@ async function ebayLoadSetup() {
   const status = document.getElementById('ebay-status');
   status.textContent = '불러오는 중...';
   try {
-    const res  = await apiPost('ebay-setup', { action: 'status' });
+    const res  = await apiPost('ebay-auth', { action: 'status' });
     const data = await res.json();
     if (!data.success) throw new Error(data.error);
     if (!data.connected) { status.textContent = '❌ 연결 안 됨 — "eBay 계정 연결"을 누르세요'; return; }
@@ -3058,7 +3058,7 @@ async function ebayLoadSetup() {
 async function ebayCreateLocation() {
   const v = id => document.getElementById(id).value.trim();
   try {
-    const res  = await apiPost('ebay-setup', {
+    const res  = await apiPost('ebay-auth', {
       action: 'create_location', key: v('ebay-loc-key'), name: v('ebay-loc-key'),
       address: { city: v('ebay-loc-city'), stateOrProvince: v('ebay-loc-state'), postalCode: v('ebay-loc-postal'), addressLine1: v('ebay-loc-addr') }
     });
