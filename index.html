@@ -660,6 +660,11 @@ tr:hover td { background: var(--surface2); }
 .login-error { color: var(--danger); font-size: 12px; min-height: 16px; }
 .login-card .btn { justify-content: center; width: 100%; }
 .topbar-user { font-size: 12px; opacity: 0.8; }
+
+/* 채널 일괄등록 드래그 앤 드롭 */
+.bulk-drop { border: 2px dashed var(--border); border-radius: 10px; transition: border-color 0.15s, background 0.15s; }
+.bulk-drop.over { border-color: var(--accent); background: var(--accent-lt); }
+#bulk-tbody tr.over { outline: 2px dashed var(--accent); outline-offset: -2px; background: var(--accent-lt); }
 </style>
 
 <!-- Login -->
@@ -981,7 +986,11 @@ tr:hover td { background: var(--surface2); }
 
       <div class="card" style="margin-bottom:16px">
         <div class="card-head"><span class="card-title">1. 파일 선택</span></div>
-        <div class="card-body" style="display:grid;gap:12px">
+        <div class="card-body bulk-drop" id="bulk-dropzone" style="display:grid;gap:12px;margin:12px"
+             ondragover="bulkDragOver(event, this)" ondragleave="bulkDragLeave(event, this)" ondrop="bulkDropFiles(event, this)">
+          <div style="text-align:center;font-size:13px;color:var(--fg-sub);padding:6px 0">
+            📂 엑셀과 이미지를 이 상자에 <b>끌어다 놓아도</b> 됩니다 (한 번에 같이 놓아도 자동으로 구분)
+          </div>
           <div class="field">
             <label>일괄등록 엑셀 (아임웹 / 토스 / 네이버 양식)</label>
             <input type="file" id="bulk-file" accept=".xlsx,.xls" onchange="bulkLoadFile(this.files[0])">
@@ -992,7 +1001,7 @@ tr:hover td { background: var(--surface2); }
               <input type="file" id="bulk-images" accept="image/*" multiple onchange="bulkLoadImages(this.files);this.value=''" style="flex:1">
               <button class="btn btn-outline btn-sm" onclick="bulkClearImages()">이미지 비우기</button>
             </div>
-            <div style="font-size:12px;color:var(--fg-faint)">상품코드로 시작하지 않는 이미지는 아래 표에서 상품마다 <b>＋ 이미지</b>로 추가하세요.</div>
+            <div style="font-size:12px;color:var(--fg-faint)">상품코드로 시작하지 않는 이미지는 아래 표에서 상품마다 <b>＋ 이미지</b>로 추가하거나, 그 상품 줄에 끌어다 놓으세요.</div>
           </div>
           <div id="bulk-info" style="font-size:13px;color:var(--fg-sub)">파일을 선택하세요.</div>
         </div>
@@ -2949,6 +2958,9 @@ async function bulkLoadFile(file) {
     bulk.rows = aoa.slice(fmt.start)
       .map(r => Object.fromEntries(fmt.header.map((h, i) => [h, r[i]])))
       .filter(o => bulkStr(o[cfg.name]) && bulkStr(o[cfg.name]) !== '샘플 상품')
+      // 네이버 양식의 예시 상품(SSKR_2021)과 설명 줄(판매가 칸이 숫자가 아님)은 건너뜀
+      .filter(o => fmt.channel !== 'naver' ||
+        (bulkStr(o['판매자 상품코드']) !== 'SSKR_2021' && /^[\d,]+$/.test(bulkStr(o['판매가']))))
       // 아임웹 상품에 자체 상품코드가 없으면 상품번호로 코드 생성 (예: IMWEB-22)
       .map(o => ({
         data: o,
@@ -2962,7 +2974,7 @@ async function bulkLoadFile(file) {
         : '아임웹 API로 바로 등록할 수 있습니다. ')
         + '이미지를 추가하세요. 배송 설정과 옵션은 아임웹 기본 설정을 따릅니다.',
       toss:  '토스는 상품 등록 API가 없어 ERP 제품에만 반영됩니다. 토스 포스에는 이 파일을 직접 올려주세요.',
-      naver: '네이버 API 등록은 다음 단계에서 지원합니다. 지금은 ERP 제품에만 반영됩니다.',
+      naver: '네이버에 바로 등록할 수 있습니다. 이미지를 추가하고, 엑셀에 없는 값(주소 ID, 배송비 등)은 채널 설정 값을 씁니다.',
     };
     info.innerHTML = `<b>${cfg.label} 양식</b> · 상품 ${bulk.rows.length}개 — ${notes[fmt.channel]}`;
     const hasRows = bulk.rows.length > 0;
@@ -3220,6 +3232,48 @@ function bulkLoadImages(files) {
   bulkRender();
 }
 
+// ── 드래그 앤 드롭 ──────────────────────────────────────────────
+function bulkIsExcel(f) { return /\.xlsx?$/i.test(f.name); }
+
+function bulkDragOver(e, el) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = 'copy';
+  el.classList.add('over');
+}
+function bulkDragLeave(e, el) {
+  if (!el.contains(e.relatedTarget)) el.classList.remove('over');
+}
+
+// 상자에 놓으면: 엑셀은 일괄등록 파일로, 이미지는 이미지 목록으로
+async function bulkDropFiles(e, el) {
+  e.preventDefault();
+  el.classList.remove('over');
+  const files  = [...e.dataTransfer.files];
+  const excels = files.filter(bulkIsExcel);
+  const images = files.filter(bulkIsImage);
+  if (!excels.length && !images.length) { toast('엑셀(.xlsx)이나 이미지 파일만 놓을 수 있습니다'); return; }
+  if (excels.length > 1) toast('엑셀은 한 번에 하나만 읽습니다 — 첫 번째 파일을 사용합니다', 3000);
+  if (excels.length) await bulkLoadFile(excels[0]);
+  if (images.length) bulkLoadImages(images);
+}
+
+// 상품 줄에 놓으면: 그 상품의 이미지로 추가
+function bulkDropRow(e, i, el) {
+  e.preventDefault();
+  e.stopPropagation();
+  el.classList.remove('over');
+  const images = [...e.dataTransfer.files].filter(bulkIsImage);
+  if (!images.length) { toast('상품 줄에는 이미지 파일만 놓을 수 있습니다'); return; }
+  bulkAddRowImages(i, images);
+  toast(`${bulk.rows[i].sku || (i + 1) + '번 상품'}에 이미지 ${images.length}장 추가`);
+}
+
+// 상자 밖에 잘못 놓았을 때 브라우저가 파일을 열어버리지 않도록
+['dragover', 'drop'].forEach(type => window.addEventListener(type, e => {
+  if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files')) e.preventDefault();
+}));
+
 function bulkClearImages() {
   bulk.images = [];
   bulk.rows.forEach(r => { r.files = []; });
@@ -3254,13 +3308,12 @@ function bulkRender() {
   tbody.innerHTML = bulk.rows.map((r, i) => {
     const imgs  = bulkRowImages(r).length;
     const stock = bulkNum(r.data[cfg.stock]);
-    const imgCell = bulk.channel === 'imweb'
-      ? `${imgs ? imgs + '장' : (bulkStr(r.data['대표이미지URL']) ? '아임웹 이미지' : '—')}
+    // 이미지는 아임웹·네이버·eBay 등록에 모두 쓰이므로 모든 양식에서 추가 가능
+    const imgCell = `${imgs ? imgs + '장' : (bulkStr(r.data['대표이미지URL']) ? '아임웹 이미지' : '—')}
          <label class="btn btn-outline btn-sm" style="margin-left:6px;cursor:pointer">＋ 이미지
            <input type="file" accept="image/*" multiple hidden onchange="bulkAddRowImages(${i}, this.files)">
-         </label>`
-      : '—';
-    return `<tr>
+         </label>`;
+    return `<tr ondragover="bulkDragOver(event, this)" ondragleave="bulkDragLeave(event, this)" ondrop="bulkDropRow(event, ${i}, this)">
       <td>${i + 1}</td>
       <td class="td-mono">${bulkEsc(r.sku) || '<span style="color:var(--danger)">없음</span>'}</td>
       <td>${bulkEsc(r.data[cfg.name])}</td>
