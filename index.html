@@ -995,7 +995,7 @@ tr:hover td { background: var(--surface2); }
             📂 엑셀과 이미지를 이 상자에 <b>끌어다 놓아도</b> 됩니다 (한 번에 같이 놓아도 자동으로 구분)
           </div>
           <div class="field">
-            <label>일괄등록 엑셀 (아임웹 / 토스 / 네이버 양식)</label>
+            <label>일괄등록 엑셀 (아임웹 / 토스 / 네이버 / eBay 양식)</label>
             <input type="file" id="bulk-file" accept=".xlsx,.xls" onchange="bulkLoadFile(this.files[0])">
           </div>
           <div class="field">
@@ -3019,7 +3019,7 @@ async function bulkLoadFile(file) {
     const ws  = wb.Sheets[wb.SheetNames[0]];
     const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
     const fmt = bulkDetect(aoa);
-    if (!fmt) throw new Error('아임웹·토스·네이버 일괄등록 양식이 아닙니다 (첫 행 항목명을 확인하세요)');
+    if (!fmt) throw new Error('아임웹·토스·네이버·eBay 일괄등록 양식이 아닙니다 (첫 행 항목명을 확인하세요)');
 
     const cfg = BULK_CHANNELS[fmt.channel];
     bulk.channel = fmt.channel;
