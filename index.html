@@ -3315,7 +3315,8 @@ async function bulkRegisterEbay() {
         });
       } catch (e) { throw new Error('eBay 게시됨, ERP 저장 실패: ' + e.message); }
       ok++;
-      bulkSetStatus(i, `<span style="color:var(--success)">eBay 게시 ✓${data.listingId ? ' #' + bulkEsc(data.listingId) : ''}</span>`);
+      const note = (data.notes || []).length ? ` <span style="color:var(--warn)">(${bulkEsc(data.notes.join(', '))})</span>` : '';
+      bulkSetStatus(i, `<span style="color:var(--success)">eBay 게시 ✓${data.listingId ? ' #' + bulkEsc(data.listingId) : ''}</span>${note}`);
     } catch (e) {
       bulkSetStatus(i, `<span style="color:var(--danger)">${bulkEsc(e.message).slice(0, 300)}</span>`);
     }
