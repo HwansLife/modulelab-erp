@@ -2972,6 +2972,8 @@ const BULK_CHANNELS = {
   imweb: { label: '아임웹', sku: '자체 상품코드', name: '상품명',   price: '판매가',       stock: '재고수량' },
   toss:  { label: '토스',   sku: '상품코드',     name: '상품이름', price: '기본가격 (원)', stock: '재고' },
   naver: { label: '네이버', sku: '판매자 상품코드', name: '상품명', price: '판매가',       stock: '재고수량' },
+  // 모듈랩 자체 eBay 양식 (상품연동\양식\eBay 양식.xlsx)
+  ebay:  { label: 'eBay',   sku: '상품코드(SKU)', name: '영문 상품명', price: 'USD 판매가', stock: '재고' },
 };
 
 function bulkEsc(s) {
@@ -3004,6 +3006,8 @@ function bulkDetect(aoa) {
   }
   if (r0[0] === '상품 ID' && r0[1] === '상품이름')     return { channel: 'toss',  header: r0, start: 3 };
   if (r1[0] === '판매자 상품코드')                       return { channel: 'naver', header: r1, start: 3 };
+  // eBay 양식: 1행 항목명, 2행 설명, 3행부터 데이터
+  if (r0[0] === '상품코드(SKU)' && r0[1] === '영문 상품명') return { channel: 'ebay', header: r0, start: 2 };
   return null;
 }
 
@@ -3039,6 +3043,7 @@ async function bulkLoadFile(file) {
         + '이미지를 추가하세요. 배송 설정과 옵션은 아임웹 기본 설정을 따릅니다.',
       toss:  '토스는 상품 등록 API가 없어 ERP 제품에만 반영됩니다. 토스 포스에는 이 파일을 직접 올려주세요.',
       naver: '네이버에 바로 등록할 수 있습니다. 이미지를 추가하고, 엑셀에 없는 값(주소 ID, 배송비 등)은 채널 설정 값을 씁니다.',
+      ebay:  'eBay에 바로 게시할 수 있습니다. 이미지를 추가하고, 엑셀에 없는 카테고리·브랜드는 채널 설정 값을 씁니다.',
     };
     info.innerHTML = `<b>${cfg.label} 양식</b> · 상품 ${bulk.rows.length}개 — ${notes[fmt.channel]}`;
     const hasRows = bulk.rows.length > 0;
@@ -3198,7 +3203,7 @@ async function bulkErpProducts() {
 
 async function bulkRegisterNaver() {
   const s = bulkSettings.naver;
-  if (!s.asPhone) { toast('채널 설정에서 네이버 A/S 전화번호를 먼저 저장하세요', 4000); document.getElementById('bulk-settings-card').open = true; return; }
+  if (!s.asPhone) { toast('채널 설정에서 네이버 A/S 전화번호를 먼저 저장하세요', 4000); bulkOpenSettings(); return; }
   if (!(await naverHelperStatus())) {
     toast('네이버 도우미가 꺼져 있습니다 — 이 PC에서 "네이버 도우미 실행"을 켜 주세요', 5000);
     return;
@@ -3226,8 +3231,8 @@ async function bulkRegisterNaver() {
 
       const product = {
         sku:            r.sku,
-        name:           bulkStr(d[cfg.name]),
-        price:          bulkNum(d[cfg.price]) ?? p.sell_price,
+        name:           bulkKoName(r, p),
+        price:          bulkKrwPrice(r, p),
         stock:          bulkNum(d[cfg.stock]) ?? p.stock ?? 0,
         detailHtml:     detail,
         brand:          bulkStr(d['브랜드']) || p.brand || '',
@@ -3264,7 +3269,7 @@ async function bulkRegisterNaver() {
 async function bulkRegisterEbay() {
   const s = bulkSettings.ebay;
   const need = ['fulfillmentPolicyId', 'paymentPolicyId', 'returnPolicyId', 'merchantLocationKey'].filter(k => !s[k]);
-  if (need.length) { toast('채널 설정에서 eBay 정책과 발송지를 먼저 저장하세요', 4000); document.getElementById('bulk-settings-card').open = true; return; }
+  if (need.length) { toast('채널 설정에서 eBay 정책과 발송지를 먼저 저장하세요', 4000); bulkOpenSettings(); return; }
   if (!confirm(`상품 ${bulk.rows.length}개를 eBay에 게시합니다. 게시 수수료가 생길 수 있습니다. 계속할까요?`)) return;
   const btn = document.getElementById('bulk-ebay-btn');
   btn.disabled = true;
@@ -3272,22 +3277,27 @@ async function bulkRegisterEbay() {
   try { erp = await bulkErpProducts(); } catch (e) { toast('ERP 제품 조회 실패: ' + e.message); }
 
   for (let i = 0; i < bulk.rows.length; i++) {
-    const r = bulk.rows[i], p = erp[r.sku];
+    const r = bulk.rows[i];
+    // eBay 양식이면 엑셀 값 우선, 빈 칸은 ERP 제품 정보 / 다른 양식이면 ERP 제품 정보
+    const p = { ...(erp[r.sku] || {}), ...(bulk.channel === 'ebay' ? bulkEbayErpRow(r) : {}) };
     try {
       if (!r.sku) throw new Error('상품코드 없음');
-      if (!p) throw new Error('ERP에 없는 상품 — 먼저 "ERP 제품에 반영" 후 제품 관리에서 영문명·USD 가격을 입력하세요');
+      if (!erp[r.sku] && bulk.channel !== 'ebay') {
+        throw new Error('ERP에 없는 상품 — eBay 양식 엑셀로 올리거나, 제품 관리에서 영문명·USD 가격을 입력하세요');
+      }
       if (p.ebay_listing_id) { bulkSetStatus(i, `eBay 이미 게시됨 (#${bulkEsc(p.ebay_listing_id)})`); continue; }
-      const missing = [!p.name_en && '영문명', !p.price_usd && 'USD 가격', !(p.ebay_category_id || s.categoryId) && 'eBay 카테고리'].filter(Boolean);
-      if (missing.length) throw new Error('제품 관리에서 입력 필요: ' + missing.join(', '));
+      const where = bulk.channel === 'ebay' ? 'eBay 엑셀에 입력 필요' : '제품 관리에서 입력 필요 (또는 eBay 양식 엑셀 사용)';
+      const missing = [!p.name_en && '영문 상품명', !p.price_usd && 'USD 판매가', !(p.ebay_category_id || s.categoryId) && 'eBay 카테고리'].filter(Boolean);
+      if (missing.length) throw new Error(`${where}: ${missing.join(', ')}`);
 
-      const urls = await bulkRowImageUrls(r, i, [p.image_url]);
+      const urls = await bulkRowImageUrls(r, i, [...bulkHttpUrls(r.data['이미지 URL']), p.image_url]);
       if (!urls.length) throw new Error('이미지 없음 (＋ 이미지로 추가하세요)');
       const asciiBrand = p.brand && /^[\x20-\x7E]+$/.test(p.brand) ? p.brand : '';
 
       bulkSetStatus(i, 'eBay 게시 중...');
       const res = await apiPost('ebay-register', {
         product: {
-          sku: p.sku, title: p.name_en, description: p.description_en || p.name_en,
+          sku: r.sku, title: p.name_en, description: p.description_en || p.name_en,
           priceUsd: p.price_usd, quantity: p.stock ?? 0, categoryId: p.ebay_category_id || s.categoryId,
           brand: asciiBrand || s.brand || 'MODULE-LAB', imageUrls: urls,
           weightG: p.weight_g, lengthCm: p.pkg_length, widthCm: p.pkg_width, heightCm: p.pkg_height
@@ -3297,10 +3307,13 @@ async function bulkRegisterEbay() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) throw new Error(data.error || ('HTTP ' + res.status));
 
-      const { error } = await sb.from('products').update({
-        ebay_offer_id: data.offerId, ebay_listing_id: data.listingId || 'published', image_url: p.image_url || urls[0]
-      }).eq('sku', p.sku);
-      if (error) throw new Error('eBay 게시됨, ERP 저장 실패: ' + error.message);
+      try {
+        await bulkUpsertErp({
+          ...(bulk.channel === 'ebay' ? bulkEbayErpRow(r) : { sku: r.sku }),
+          ebay_offer_id: data.offerId, ebay_listing_id: data.listingId || 'published',
+          image_url: (erp[r.sku] && erp[r.sku].image_url) || urls[0]
+        });
+      } catch (e) { throw new Error('eBay 게시됨, ERP 저장 실패: ' + e.message); }
       ok++;
       bulkSetStatus(i, `<span style="color:var(--success)">eBay 게시 ✓${data.listingId ? ' #' + bulkEsc(data.listingId) : ''}</span>`);
     } catch (e) {
@@ -3408,7 +3421,7 @@ function bulkRender() {
       <td>${i + 1}</td>
       <td class="td-mono">${bulkEsc(r.sku) || '<span style="color:var(--danger)">없음</span>'}</td>
       <td>${bulkEsc(r.data[cfg.name])}</td>
-      <td class="td-right td-mono">${fmt(bulkNum(r.data[cfg.price]) || 0)}</td>
+      <td class="td-right td-mono">${bulk.channel === 'ebay' ? '$' + (bulkNum(r.data[cfg.price]) ?? 0).toFixed(2) : fmt(bulkNum(r.data[cfg.price]) || 0)}</td>
       <td class="td-right">${stock ?? '—'}</td>
       <td style="white-space:nowrap">${imgCell}</td>
       <td style="font-size:12px">${r.status}</td>
@@ -3418,9 +3431,17 @@ function bulkRender() {
 
 function bulkSetStatus(i, html) { bulk.rows[i].status = html; bulkRender(); }
 
+// 설정이 빠져 등록이 멈췄을 때: 접혀 있는 채널 설정을 펼치고 그 위치로 이동
+function bulkOpenSettings() {
+  const card = document.getElementById('bulk-settings-card');
+  card.open = true;
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 // 양식 한 줄 → ERP products 행 (빈 값은 보내지 않아 기존 값을 지우지 않음)
 function bulkErpRow(r) {
   const d = r.data, cfg = BULK_CHANNELS[bulk.channel];
+  if (bulk.channel === 'ebay') return bulkEbayErpRow(r);
   const row = { sku: r.sku, name: bulkStr(d[cfg.name]), active: true };
   const price = bulkNum(d[cfg.price]);
   const stock = bulkNum(d[cfg.stock]);
@@ -3438,7 +3459,40 @@ function bulkErpRow(r) {
   return row;
 }
 
+// 국내 채널(아임웹·네이버)에 쓸 상품명·원화 가격
+// eBay 양식은 영문명·USD 가격이라 한글 상품명 칸 → ERP 제품 정보 순으로 씀
+function bulkKoName(r, p) {
+  const d = r.data, cfg = BULK_CHANNELS[bulk.channel];
+  if (bulk.channel === 'ebay') return bulkStr(d['한글 상품명']) || p.name || bulkStr(d[cfg.name]);
+  return bulkStr(d[cfg.name]) || p.name;
+}
+function bulkKrwPrice(r, p) {
+  const cfg = BULK_CHANNELS[bulk.channel];
+  if (bulk.channel === 'ebay') return p.sell_price;
+  return bulkNum(r.data[cfg.price]) ?? p.sell_price;
+}
+
+// eBay 양식 한 줄 → ERP products 행
+// 한글 상품명이 비어 있으면 name을 보내지 않음 (기존 제품의 한글 이름을 영문으로 덮어쓰지 않도록)
+function bulkEbayErpRow(r) {
+  const d = r.data;
+  const row = { sku: r.sku, active: true, name_en: bulkStr(d['영문 상품명']) };
+  if (bulkStr(d['한글 상품명'])) row.name = bulkStr(d['한글 상품명']);
+  const num = { price_usd: 'USD 판매가', stock: '재고', weight_g: '무게(g)', pkg_length: '가로(cm)', pkg_width: '세로(cm)', pkg_height: '높이(cm)' };
+  for (const [k, h] of Object.entries(num)) { const v = bulkNum(d[h]); if (v !== undefined) row[k] = v; }
+  const str = { ebay_category_id: 'eBay 카테고리 ID', brand: '브랜드(영문)', description_en: '영문 상세설명' };
+  for (const [k, h] of Object.entries(str)) if (bulkStr(d[h])) row[k] = bulkStr(d[h]);
+  return row;
+}
+
 async function bulkUpsertErp(row) {
+  if (!row.name) {
+    // 이름 없이 들어온 행: 있는 제품이면 그대로 수정, 새 제품이면 영문명을 이름으로 추가
+    const { data, error } = await sb.from('products').update(row).eq('sku', row.sku).select('id');
+    if (error) throw new Error(error.message);
+    if (data && data.length) return;
+    row = { ...row, name: row.name_en || row.sku };
+  }
   const { error } = await sb.from('products').upsert(row, { onConflict: 'sku' });
   if (error) throw new Error(error.message);
 }
@@ -3542,10 +3596,10 @@ function bulkResolveImwebCats(values, cats) {
 // 아임웹 양식이 아닌 엑셀(토스·네이버) 한 줄 → 아임웹 등록 요청 (빈 값은 ERP 제품·채널 설정으로)
 function bulkImwebPayloadGeneric(r, p, urls, content) {
   const d = r.data, cfg = BULK_CHANNELS[bulk.channel];
-  const price = bulkNum(d[cfg.price]) ?? p.sell_price;
+  const price = bulkKrwPrice(r, p);
   const stock = bulkNum(d[cfg.stock]) ?? p.stock ?? 0;
   const out = {
-    name:             bulkStr(d[cfg.name]) || p.name,
+    name:             bulkKoName(r, p),
     custom_prod_code: r.sku,
     prod_type:        'normal',
     prod_status:      'sale',
@@ -3604,7 +3658,10 @@ async function bulkRegisterImweb() {
       if (missing.length) {
         throw new Error(`아임웹에 없는 카테고리: ${missing.join(', ')} — 채널 설정 → 아임웹 "카테고리 불러오기"에서 이름이나 코드를 확인하세요`);
       }
-      if (!codes.length) throw new Error('아임웹 카테고리 없음 (엑셀 카테고리ID 또는 채널 설정 기본 카테고리)');
+      if (!codes.length) {
+        bulkOpenSettings();
+        throw new Error('아임웹 카테고리 없음 — 위 ⚙️ 채널 설정 → 아임웹에서 "카테고리 불러오기" 후 기본 카테고리를 고르고 저장하세요');
+      }
 
       const urls = await bulkRowImageUrls(r, i, [...bulkHttpUrls(d['대표이미지URL']), ...bulkHttpUrls(d['대표이미지']), p.image_url]);
       if (!urls.length) throw new Error('이미지 없음 (＋ 이미지로 추가하세요)');
