@@ -965,10 +965,10 @@ tr:hover td { background: var(--surface2); }
         <div class="card-body-p0 tbl-wrap">
           <table>
             <thead>
-              <tr><th>거래처명</th><th>유형</th><th>담당자</th><th>연락처</th><th>이메일</th><th>메모</th></tr>
+              <tr><th>거래처명</th><th>유형</th><th>담당자</th><th>연락처</th><th>이메일</th><th>사이트</th><th>메모</th></tr>
             </thead>
             <tbody id="partners-tbody">
-              <tr><td colspan="6"><div class="spinner"></div></td></tr>
+              <tr><td colspan="7"><div class="spinner"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -1545,6 +1545,7 @@ tr:hover td { background: var(--surface2); }
         <div class="field"><label>연락처</label><input id="pt-phone" placeholder="010-0000-0000"></div>
       </div>
       <div class="field"><label>이메일</label><input id="pt-email" type="email" placeholder="example@company.com"></div>
+      <div class="field"><label>사이트 주소</label><input id="pt-website" placeholder="예: buyrc.co.kr"></div>
       <div class="field"><label>메모</label><textarea id="pt-memo"></textarea></div>
     </div>
     <div class="overlay-foot">
@@ -2186,7 +2187,7 @@ async function loadPartners() {
 
   const tbody = document.getElementById('partners-tbody');
   if (items.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
       <div class="empty-icon">🤝</div>
       <div class="empty-title">등록된 거래처 없음</div>
       <button class="btn btn-primary" onclick="openOverlay('overlay-partner')">+ 거래처 등록</button>
@@ -2199,8 +2200,17 @@ async function loadPartners() {
     <td>${p.contact || '—'}</td>
     <td>${p.phone || '—'}</td>
     <td>${p.email || '—'}</td>
+    <td>${p.website
+      ? `<a class="btn btn-outline btn-sm" href="${bulkEsc(partnerUrl(p.website))}" target="_blank" rel="noopener" title="${bulkEsc(p.website)}">🔗 바로가기</a>`
+      : '—'}</td>
     <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.memo || ''}</td>
   </tr>`).join('');
+}
+
+// 'buyrc.co.kr' 처럼 입력해도 열리도록 주소 앞에 https:// 를 붙임
+function partnerUrl(site) {
+  const s = String(site || '').trim();
+  return /^https?:\/\//i.test(s) ? s : 'https://' + s;
 }
 
 async function loadExpenses() {
@@ -2482,13 +2492,14 @@ async function savePartner() {
       contact: document.getElementById('pt-contact').value.trim() || null,
       phone: document.getElementById('pt-phone').value.trim() || null,
       email: document.getElementById('pt-email').value.trim() || null,
+      website: document.getElementById('pt-website').value.trim() || null,
       memo: document.getElementById('pt-memo').value.trim() || null,
     });
     closeOverlay('overlay-partner');
     state.loaded.partners = false;
     await loadPartners();
     toast('거래처가 등록되었습니다 ✓');
-    ['pt-name','pt-contact','pt-phone','pt-email','pt-memo'].forEach(id => document.getElementById(id).value = '');
+    ['pt-name','pt-contact','pt-phone','pt-email','pt-website','pt-memo'].forEach(id => document.getElementById(id).value = '');
   } catch(e) { toast('오류: ' + e.message); }
 }
 
