@@ -672,6 +672,19 @@ tr:hover td { background: var(--surface2); }
 }
 .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .login-brand .brand-logo { background: var(--fg); width: 35px; height: 40px; }
+/* 거래처 첨부 서류 칸 */
+.pt-docs { display: flex; flex-direction: column; gap: 6px; }
+.pt-doc {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface2);
+}
+.pt-doc-kind { width: 84px; flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--fg); }
+.pt-doc-file { flex: 1; min-width: 0; font-size: 12px; color: var(--fg-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pt-doc-file.pending { color: var(--accent); }
+.pt-doc .btn { flex-shrink: 0; }
+.pt-doc.over { border: 1px dashed var(--accent); background: var(--accent-lt); }
+#partners-tbody tr { cursor: pointer; }
+.pt-doc-count { margin-left: 6px; font-size: 11px; color: var(--fg-faint); font-weight: 400; }
 .login-brand .brand-name { color: var(--fg); }
 .login-brand .brand-sub { color: var(--fg-sub); }
 .login-error { color: var(--danger); font-size: 12px; min-height: 16px; }
@@ -992,7 +1005,7 @@ tr:hover td { background: var(--surface2); }
           <div class="page-title">거래처 관리</div>
           <div class="page-sub">공급업체 · 협력업체 · 고객사</div>
         </div>
-        <button class="btn btn-primary" onclick="openOverlay('overlay-partner')">+ 거래처 등록</button>
+        <button class="btn btn-primary" onclick="openPartner(null)">+ 거래처 등록</button>
       </div>
       <div class="card">
         <div class="card-body-p0 tbl-wrap">
@@ -1559,10 +1572,11 @@ tr:hover td { background: var(--surface2); }
 <div class="overlay" id="overlay-partner">
   <div class="overlay-card">
     <div class="overlay-head">
-      <span class="overlay-title">거래처 등록</span>
+      <span class="overlay-title" id="pt-title">거래처 등록</span>
       <button class="overlay-close" onclick="closeOverlay('overlay-partner')">✕</button>
     </div>
     <div class="overlay-body">
+      <input type="hidden" id="pt-id">
       <div class="field-row">
         <div class="field"><label>거래처명 *</label><input id="pt-name" placeholder="상호명"></div>
         <div class="field"><label>유형</label>
@@ -1580,6 +1594,11 @@ tr:hover td { background: var(--surface2); }
       <div class="field"><label>이메일</label><input id="pt-email" type="email" placeholder="example@company.com"></div>
       <div class="field"><label>사이트 주소</label><input id="pt-website" placeholder="예: buyrc.co.kr"></div>
       <div class="field"><label>메모</label><textarea id="pt-memo"></textarea></div>
+      <div class="field">
+        <label>첨부 서류</label>
+        <div class="pt-docs" id="pt-docs"></div>
+        <div style="font-size:11px;color:var(--fg-faint);margin-top:4px">칸에 파일을 끌어다 놓아도 됩니다 · 사진·PDF 20MB까지 · 저장을 눌러야 올라갑니다 · 직원 로그인으로만 열람</div>
+      </div>
     </div>
     <div class="overlay-foot">
       <button class="btn btn-outline" onclick="closeOverlay('overlay-partner')">취소</button>
@@ -2247,21 +2266,129 @@ async function loadPartners() {
     tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
       <div class="empty-icon">🤝</div>
       <div class="empty-title">등록된 거래처 없음</div>
-      <button class="btn btn-primary" onclick="openOverlay('overlay-partner')">+ 거래처 등록</button>
+      <button class="btn btn-primary" onclick="openPartner(null)">+ 거래처 등록</button>
     </div></td></tr>`;
     return;
   }
-  tbody.innerHTML = items.map(p => `<tr>
-    <td><strong>${p.name}</strong></td>
+  tbody.innerHTML = items.map(p => {
+    const docCount = PARTNER_DOCS.filter(d => p.docs && p.docs[d.key]).length;
+    return `<tr onclick="openPartner(${p.id})" title="눌러서 정보·서류 보기">
+    <td><strong>${bulkEsc(p.name)}</strong>${docCount ? `<span class="pt-doc-count">📎 ${docCount}</span>` : ''}</td>
     <td>${statusBadge(p.type)}</td>
     <td>${p.contact || '—'}</td>
     <td>${p.phone || '—'}</td>
     <td>${p.email || '—'}</td>
     <td>${p.website
-      ? `<a class="btn btn-outline btn-sm" href="${bulkEsc(partnerUrl(p.website))}" target="_blank" rel="noopener" title="${bulkEsc(p.website)}">🔗 바로가기</a>`
+      ? `<a class="btn btn-outline btn-sm" href="${bulkEsc(partnerUrl(p.website))}" target="_blank" rel="noopener" title="${bulkEsc(p.website)}" onclick="event.stopPropagation()">🔗 바로가기</a>`
       : '—'}</td>
     <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.memo || ''}</td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
+}
+
+// ── 거래처 정보 · 첨부 서류 ─────────────────────────────────────────
+// 서류는 비공개 저장소 partner-docs/{거래처id}/ 에 두고, partners.docs 에 { 종류: {path,name,size} } 로 기록
+const PARTNER_DOCS = [
+  { key: 'card',   label: '명함' },
+  { key: 'bank',   label: '통장사본' },
+  { key: 'bizreg', label: '사업자등록증' },
+];
+const ptDocState = { saved: {}, pending: {}, removed: {} };
+
+function openPartner(id) {
+  const p = id ? (state.partners || []).find(x => x.id === id) : null;
+  document.getElementById('pt-title').textContent = p ? '거래처 정보' : '거래처 등록';
+  document.getElementById('pt-id').value = p ? p.id : '';
+  document.getElementById('pt-name').value    = p?.name    || '';
+  document.getElementById('pt-type').value    = p?.type    || 'supplier';
+  document.getElementById('pt-contact').value = p?.contact || '';
+  document.getElementById('pt-phone').value   = p?.phone   || '';
+  document.getElementById('pt-email').value   = p?.email   || '';
+  document.getElementById('pt-website').value = p?.website || '';
+  document.getElementById('pt-memo').value    = p?.memo    || '';
+  ptDocState.saved = { ...(p?.docs || {}) };
+  ptDocState.pending = {};
+  ptDocState.removed = {};
+  renderPartnerDocs();
+  openOverlay('overlay-partner');
+}
+
+function renderPartnerDocs() {
+  document.getElementById('pt-docs').innerHTML = PARTNER_DOCS.map(d => {
+    const pend = ptDocState.pending[d.key], saved = ptDocState.saved[d.key];
+    let file, btns = '';
+    if (pend) {
+      file = `<span class="pt-doc-file pending" title="${bulkEsc(pend.name)}">↑ ${bulkEsc(pend.name)} (저장 시 올라감)</span>`;
+      btns = `<button class="btn btn-outline btn-sm" onclick="ptDocCancel('${d.key}')">취소</button>`;
+    } else if (saved) {
+      file = `<span class="pt-doc-file" title="${bulkEsc(saved.name)}">${bulkEsc(saved.name)}</span>`;
+      btns = `<button class="btn btn-primary btn-sm" onclick="ptDocDownload('${d.key}')">⬇ 내려받기</button>
+              <button class="btn btn-outline btn-sm" onclick="ptDocPick('${d.key}')">교체</button>
+              <button class="btn btn-outline btn-sm" onclick="ptDocRemove('${d.key}')" title="삭제">✕</button>`;
+    } else {
+      file = `<span class="pt-doc-file">${ptDocState.removed[d.key] ? '삭제 예정 (저장 시 반영)' : '없음'}</span>`;
+      btns = `<button class="btn btn-outline btn-sm" onclick="ptDocPick('${d.key}')">+ 첨부</button>`;
+    }
+    // 각 칸에 파일을 끌어다 놓아도 첨부됨
+    return `<div class="pt-doc" ondragover="event.preventDefault();this.classList.add('over')"
+      ondragleave="this.classList.remove('over')"
+      ondrop="event.preventDefault();this.classList.remove('over');ptDocSet('${d.key}',event.dataTransfer.files[0])">
+      <span class="pt-doc-kind">${d.label}</span>${file}${btns}</div>`;
+  }).join('');
+}
+
+function ptDocPick(key) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*,application/pdf';
+  inp.onchange = () => ptDocSet(key, inp.files[0]);
+  inp.click();
+}
+
+function ptDocSet(key, f) {
+  if (!f) return;
+  if (!/^image\/|^application\/pdf$/.test(f.type)) { toast('사진이나 PDF 파일만 첨부할 수 있어요'); return; }
+  if (f.size > 20 * 1024 * 1024) { toast('20MB 이하 파일만 올릴 수 있어요'); return; }
+  ptDocState.pending[key] = f;
+  renderPartnerDocs();
+}
+function ptDocCancel(key) { delete ptDocState.pending[key]; renderPartnerDocs(); }
+function ptDocRemove(key) {
+  if (!confirm('이 서류를 삭제할까요? (저장을 눌러야 반영됩니다)')) return;
+  ptDocState.removed[key] = ptDocState.saved[key];
+  delete ptDocState.saved[key];
+  renderPartnerDocs();
+}
+
+// 1분짜리 임시 주소로 바로 내려받기 (파일명: 거래처명_서류종류.확장자)
+async function ptDocDownload(key) {
+  const doc = ptDocState.saved[key];
+  if (!doc) return;
+  const label = PARTNER_DOCS.find(d => d.key === key).label;
+  const ext = (doc.name.match(/\.[^.]+$/) || [''])[0];
+  const partnerName = document.getElementById('pt-name').value.trim() || '거래처';
+  const { data, error } = await sb.storage.from('partner-docs')
+    .createSignedUrl(doc.path, 60, { download: `${partnerName}_${label}${ext}` });
+  if (error) { toast('내려받기 실패: ' + error.message); return; }
+  const a = document.createElement('a');
+  a.href = data.signedUrl;
+  a.click();
+}
+
+// 새로 고른 파일 올리기 + 삭제·교체된 옛 파일 지우기 → partners.docs 갱신
+async function savePartnerDocs(partnerId) {
+  const docs = { ...ptDocState.saved };
+  const oldPaths = Object.values(ptDocState.removed).filter(Boolean).map(d => d.path);
+  for (const [key, f] of Object.entries(ptDocState.pending)) {
+    const ext = (f.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+    const path = `${partnerId}/${key}_${Date.now()}${ext}`;   // 한글 파일명은 저장소 경로에 쓰지 않음
+    const { error } = await sb.storage.from('partner-docs').upload(path, f, { contentType: f.type || undefined });
+    if (error) throw new Error(`${PARTNER_DOCS.find(d => d.key === key).label} 올리기 실패: ${error.message}`);
+    if (docs[key]) oldPaths.push(docs[key].path);
+    docs[key] = { path, name: f.name, size: f.size };
+  }
+  await sbPatch('partners', partnerId, { docs });
+  if (oldPaths.length) await sb.storage.from('partner-docs').remove(oldPaths);
 }
 
 // 'buyrc.co.kr' 처럼 입력해도 열리도록 주소 앞에 https:// 를 붙임
@@ -2542,22 +2669,35 @@ async function saveSale() {
 async function savePartner() {
   const name = document.getElementById('pt-name').value.trim();
   if (!name) { toast('거래처명을 입력하세요'); return; }
+  const editId = Number(document.getElementById('pt-id').value) || null;
+  const body = {
+    name,
+    type: document.getElementById('pt-type').value,
+    contact: document.getElementById('pt-contact').value.trim() || null,
+    phone: document.getElementById('pt-phone').value.trim() || null,
+    email: document.getElementById('pt-email').value.trim() || null,
+    website: document.getElementById('pt-website').value.trim() || null,
+    memo: document.getElementById('pt-memo').value.trim() || null,
+  };
   try {
-    await sbPost('partners', {
-      name,
-      type: document.getElementById('pt-type').value,
-      contact: document.getElementById('pt-contact').value.trim() || null,
-      phone: document.getElementById('pt-phone').value.trim() || null,
-      email: document.getElementById('pt-email').value.trim() || null,
-      website: document.getElementById('pt-website').value.trim() || null,
-      memo: document.getElementById('pt-memo').value.trim() || null,
-    });
+    let id = editId;
+    if (editId) await sbPatch('partners', editId, body);
+    else {
+      id = (await sbPost('partners', body))[0].id;
+      document.getElementById('pt-id').value = id;   // 서류 올리기가 실패해 다시 저장해도 거래처가 두 번 생기지 않게
+    }
+    const docsChanged = Object.keys(ptDocState.pending).length || Object.keys(ptDocState.removed).length;
+    if (docsChanged) await savePartnerDocs(id);
     closeOverlay('overlay-partner');
     state.loaded.partners = false;
     await loadPartners();
-    toast('거래처가 등록되었습니다 ✓');
-    ['pt-name','pt-contact','pt-phone','pt-email','pt-website','pt-memo'].forEach(id => document.getElementById(id).value = '');
-  } catch(e) { toast('오류: ' + e.message); }
+    toast(editId ? '거래처 정보가 저장되었습니다 ✓' : '거래처가 등록되었습니다 ✓');
+  } catch(e) {
+    toast('오류: ' + e.message);
+    // 새 거래처는 이미 만들어졌을 수 있으니 목록을 다시 읽음
+    state.loaded.partners = false;
+    await loadPartners().catch(() => {});
+  }
 }
 
 async function saveExpense() {
