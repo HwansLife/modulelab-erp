@@ -1119,7 +1119,7 @@ tr.asset-gone td { color: var(--fg-faint); }
       <div class="page-head">
         <div>
           <div class="page-title">자산 관리</div>
-          <div class="page-sub">회사가 가진 유형자산 · 무형자산 · 소모품 (장부가액은 정액법으로 자동 계산)</div>
+          <div class="page-sub">회사가 가진 유형자산 · 무형자산 · 소모품 · 금액은 모두 공급가액(부가세 제외), 장부가액은 정액법으로 자동 계산</div>
         </div>
         <button class="btn btn-primary" onclick="openAssetForm(null)">+ 자산 등록</button>
       </div>
@@ -1157,7 +1157,7 @@ tr.asset-gone td { color: var(--fg-faint); }
             <thead>
               <tr>
                 <th>자산명</th><th>분류</th><th>취득일</th>
-                <th class="td-right">취득가</th><th class="td-right">수량</th><th class="td-right">장부가액</th>
+                <th class="td-right" title="부가세를 뺀 공급가액">취득가 (공급가)</th><th class="td-right">수량</th><th class="td-right">장부가액</th>
                 <th>위치 · 담당</th><th>상태</th><th></th>
               </tr>
             </thead>
@@ -1781,7 +1781,17 @@ tr.asset-gone td { color: var(--fg-faint); }
       </div>
       <div class="field-row">
         <div class="field"><label>취득일</label><input id="as-date" type="date" oninput="assetPreview()"></div>
-        <div class="field"><label>취득가 (총액, ₩)</label><input id="as-cost" type="number" placeholder="0" oninput="assetPreview()"></div>
+        <div class="field"><label>부가세 구분</label>
+          <select id="as-vat" onchange="assetVatSync('cost')">
+            <option value="taxable">과세 (세금계산서·카드 — 부가세 공제)</option>
+            <option value="none">부가세 없음 (해외·간이·면세·보증금)</option>
+          </select>
+        </div>
+      </div>
+      <!-- 장부에는 공급가액만 저장. 영수증 금액(부가세 포함)을 넣으면 자동으로 ÷1.1 -->
+      <div class="field-row">
+        <div class="field"><label>결제 금액 (부가세 포함, ₩)</label><input id="as-cost-vat" type="number" placeholder="영수증 금액" oninput="assetVatSync('vat')"></div>
+        <div class="field"><label>취득가 = 공급가액 (장부에 저장, ₩)</label><input id="as-cost" type="number" placeholder="0" oninput="assetVatSync('cost')"></div>
       </div>
       <div class="field-row">
         <div class="field"><label>수량</label><input id="as-qty" type="number" step="any" value="1"></div>
@@ -2568,6 +2578,9 @@ function openAssetForm(id) {
   v('as-name', a?.name); v('as-model', a?.model); v('as-serial', a?.serial_no);
   v('as-date', a?.acquired_date || new Date().toISOString().slice(0, 10));
   v('as-cost', a?.acquired_cost); v('as-qty', a?.quantity ?? 1); v('as-unit', a?.unit || '개');
+  // 보증금은 부가세 없음, 나머지는 과세로 보고 결제 금액(부가세 포함)을 같이 보여 줌
+  v('as-vat', (a?.asset_type || document.getElementById('as-type').value) === 'other' ? 'none' : 'taxable');
+  assetVatSync('cost');
   v('as-residual', a?.residual_value ?? 0); v('as-min', a?.min_quantity);
   v('as-location', a?.location); v('as-manager', a?.manager);
   v('as-status', a?.status || 'in_use'); v('as-disposed', a?.disposed_date); v('as-memo', a?.memo);
@@ -2620,6 +2633,15 @@ function assetCatHelp() {
 function assetStatusChanged() {
   const gone = ['disposed', 'sold'].includes(document.getElementById('as-status').value);
   document.getElementById('as-disposed-row').hidden = !gone;
+}
+
+// 결제 금액(부가세 포함) ↔ 공급가액 자동 계산. 부가세 없음이면 두 값이 같음
+function assetVatSync(from) {
+  const vatOn = document.getElementById('as-vat').value === 'taxable';
+  const gross = document.getElementById('as-cost-vat'), net = document.getElementById('as-cost');
+  if (from === 'vat') net.value = gross.value === '' ? '' : (vatOn ? Math.round(Number(gross.value) / 1.1) : Number(gross.value));
+  else gross.value = net.value === '' ? '' : (vatOn ? Math.round(Number(net.value) * 1.1) : Number(net.value));
+  assetPreview();
 }
 
 // 폼에서 고른 값으로 장부가액 미리 계산
