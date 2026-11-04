@@ -575,6 +575,24 @@ tr:hover td { background: var(--surface2); }
 .connect-banner-text { font-size: 13px; flex: 1; min-width: 200px; }
 .connect-banner-text strong { color: var(--accent); }
 
+/* 취소·환불 주문: 회색 + 가운데 줄 (채널·상태 배지는 그대로 보이게) */
+tr.sale-void td { color: var(--fg-faint); text-decoration: line-through; }
+tr.sale-void td .badge, tr.sale-void td .btn { text-decoration: none; opacity: .7; }
+
+/* hidden 속성은 .field 같은 display 지정보다 항상 우선 */
+[hidden] { display: none !important; }
+
+/* 자산 관리 */
+.assets-table th, .assets-table td { white-space: nowrap; }
+#assets-tbody tr:not(.ptype-group-row) { cursor: pointer; }
+.asset-name-sub { display: block; font-size: 11px; color: var(--fg-faint); font-weight: 400; }
+.asset-dep-bar { display: block; height: 3px; border-radius: 2px; background: var(--surface2); margin-top: 4px; overflow: hidden; }
+.asset-dep-bar > i { display: block; height: 100%; background: var(--accent); }
+tr.asset-gone td { color: var(--fg-faint); }
+.asset-preview { font-size: 12px; color: var(--fg-sub); background: var(--surface2); border-radius: 8px; padding: 10px 12px; line-height: 1.7; }
+.asset-preview:empty { display: none; }
+.asset-preview b { color: var(--fg); }
+
 /* 제품 / 상품 구분 탭 */
 .ptype-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
 .ptype-tab {
@@ -707,7 +725,10 @@ tr:hover td { background: var(--surface2); }
 .pt-doc .btn { flex-shrink: 0; }
 .pt-doc.over { border: 1px dashed var(--accent); background: var(--accent-lt); }
 #partners-tbody tr { cursor: pointer; }
-.pt-doc-count { margin-left: 6px; font-size: 11px; color: var(--fg-faint); font-weight: 400; }
+/* 거래처 목록: 칸 간격을 좁히고, 메모가 남는 폭을 차지 */
+.partners-table th, .partners-table td { padding-left: 10px; padding-right: 10px; white-space: nowrap; }
+.partners-table td.pt-memo { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; width: 100%; color: var(--fg-sub); }
+.partners-table td.pt-cell-over { outline: 2px dashed var(--accent); outline-offset: -3px; background: var(--accent-lt); }
 .login-brand .brand-name { color: var(--fg); }
 .login-brand .brand-sub { color: var(--fg-sub); }
 .login-error { color: var(--danger); font-size: 12px; min-height: 16px; }
@@ -803,6 +824,13 @@ tr:hover td { background: var(--surface2); }
     <button class="nav-item" onclick="showPanel('expenses')">
       <svg class="nav-icon" viewBox="0 0 24 24"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg>
       비용 정산
+    </button>
+
+    <div class="nav-section-label">회사</div>
+    <button class="nav-item" onclick="showPanel('assets')">
+      <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/><path d="M11 13v2h2v-2"/></svg>
+      자산 관리
+      <span class="nav-badge" id="nav-asset-badge" hidden>!</span>
     </button>
 
     <div class="nav-section-label">개발</div>
@@ -1033,12 +1061,13 @@ tr:hover td { background: var(--surface2); }
       </div>
       <div class="card">
         <div class="card-body-p0 tbl-wrap">
-          <table>
+          <table class="partners-table">
             <thead>
-              <tr><th>거래처명</th><th>유형</th><th>담당자</th><th>연락처</th><th>이메일</th><th>사이트</th><th>메모</th></tr>
+              <tr><th>거래처명</th><th>유형</th><th>담당자</th><th>연락처</th><th>이메일</th><th>사이트</th>
+                  <th class="td-center">명함</th><th class="td-center">통장사본</th><th class="td-center">사업자등록증</th><th>메모</th></tr>
             </thead>
             <tbody id="partners-tbody">
-              <tr><td colspan="7"><div class="spinner"></div></td></tr>
+              <tr><td colspan="10"><div class="spinner"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -1079,6 +1108,56 @@ tr:hover td { background: var(--surface2); }
             </thead>
             <tbody id="expenses-tbody">
               <tr><td colspan="5"><div class="spinner"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 자산 관리 ── -->
+    <section class="panel" id="panel-assets">
+      <div class="page-head">
+        <div>
+          <div class="page-title">자산 관리</div>
+          <div class="page-sub">회사가 가진 유형자산 · 무형자산 · 소모품 (장부가액은 정액법으로 자동 계산)</div>
+        </div>
+        <button class="btn btn-primary" onclick="openAssetForm(null)">+ 자산 등록</button>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-label">유형자산 장부가액</div>
+          <div class="kpi-value accent" id="kpi-asset-tangible">—</div>
+          <div class="kpi-delta" id="kpi-asset-tangible-sub">취득가 —</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">무형자산 장부가액</div>
+          <div class="kpi-value accent" id="kpi-asset-intangible">—</div>
+          <div class="kpi-delta" id="kpi-asset-intangible-sub">취득가 —</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">소모품 보유액</div>
+          <div class="kpi-value success" id="kpi-asset-supplies">—</div>
+          <div class="kpi-delta" id="kpi-asset-supplies-sub">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">이번 달 감가상각비</div>
+          <div class="kpi-value warn" id="kpi-asset-dep">—</div>
+          <div class="kpi-delta">유형 + 무형 (추정)</div>
+        </div>
+      </div>
+      <div class="ptype-tabs" id="asset-tabs"></div>
+      <div class="card">
+        <div class="card-body-p0 tbl-wrap">
+          <table class="assets-table">
+            <thead>
+              <tr>
+                <th>자산명</th><th>분류</th><th>취득일</th>
+                <th class="td-right">취득가</th><th class="td-right">수량</th><th class="td-right">장부가액</th>
+                <th>위치 · 담당</th><th>상태</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="assets-tbody">
+              <tr><td colspan="9"><div class="spinner"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -1669,6 +1748,72 @@ tr:hover td { background: var(--surface2); }
   </div>
 </div>
 
+<!-- 자산 등록 / 수정 -->
+<div class="overlay" id="overlay-asset">
+  <div class="overlay-card" style="max-width:640px">
+    <div class="overlay-head">
+      <span class="overlay-title" id="as-title">자산 등록</span>
+      <button class="overlay-close" onclick="closeOverlay('overlay-asset')">✕</button>
+    </div>
+    <div class="overlay-body">
+      <input type="hidden" id="as-id">
+      <div class="field-row">
+        <div class="field"><label>구분 *</label>
+          <select id="as-type" onchange="assetTypeChanged()">
+            <option value="tangible">유형자산</option>
+            <option value="intangible">무형자산</option>
+            <option value="supplies">소모품</option>
+          </select>
+        </div>
+        <div class="field"><label>세부 분류 *</label><select id="as-cat" onchange="assetCatChanged()"></select></div>
+      </div>
+      <div class="field" id="as-cat-help" style="font-size:11px;color:var(--fg-faint);margin-top:-6px"></div>
+      <div class="field"><label>자산명 *</label><input id="as-name" placeholder="예: 3D 프린터 Bambu X1C"></div>
+      <div class="field-row">
+        <div class="field"><label>모델 / 규격</label><input id="as-model" placeholder="예: X1-Carbon"></div>
+        <div class="field"><label>일련번호 · 등록번호</label><input id="as-serial" placeholder="시리얼, 특허번호 등"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>취득일</label><input id="as-date" type="date" oninput="assetPreview()"></div>
+        <div class="field"><label>취득가 (총액, ₩)</label><input id="as-cost" type="number" placeholder="0" oninput="assetPreview()"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>수량</label><input id="as-qty" type="number" step="any" value="1"></div>
+        <div class="field"><label>단위</label><input id="as-unit" value="개" placeholder="개, 박스, 롤 …"></div>
+      </div>
+      <div class="field-row" id="as-dep-row">
+        <div class="field"><label>내용연수 (년)</label><input id="as-life" type="number" placeholder="5" oninput="this.dataset.touched='1';assetPreview()"></div>
+        <div class="field"><label>잔존가치 (₩)</label><input id="as-residual" type="number" value="0" oninput="assetPreview()"></div>
+      </div>
+      <div class="field" id="as-min-row"><label>적정 재고 (이 수량보다 적으면 '부족' 표시)</label><input id="as-min" type="number" step="any" placeholder="예: 5"></div>
+      <div class="field-row">
+        <div class="field"><label>위치</label><input id="as-location" placeholder="예: 작업실, 사무실"></div>
+        <div class="field"><label>담당자</label><input id="as-manager" placeholder="이름"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>구입처</label><select id="as-partner"><option value="">—</option></select></div>
+        <div class="field"><label>상태</label>
+          <select id="as-status" onchange="assetStatusChanged();assetPreview()">
+            <option value="in_use">사용중</option>
+            <option value="stored">보관</option>
+            <option value="repair">수리중</option>
+            <option value="disposed">폐기</option>
+            <option value="sold">매각</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" id="as-disposed-row"><label>폐기 · 매각일</label><input id="as-disposed" type="date" oninput="assetPreview()"></div>
+      <div class="field"><label>메모</label><textarea id="as-memo"></textarea></div>
+      <div class="asset-preview" id="as-preview"></div>
+    </div>
+    <div class="overlay-foot">
+      <button class="btn btn-outline" id="as-delete" style="margin-right:auto;color:var(--danger)" onclick="deleteAsset()">삭제</button>
+      <button class="btn btn-outline" onclick="closeOverlay('overlay-asset')">취소</button>
+      <button class="btn btn-primary" onclick="saveAsset()">저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- 배송 처리 -->
 <div class="overlay" id="overlay-ship">
   <div class="overlay-card">
@@ -1945,6 +2090,7 @@ async function loadPanel(id) {
     if (id === 'sales') await loadSales();
     if (id === 'partners') await loadPartners();
     if (id === 'expenses') await loadExpenses();
+    if (id === 'assets') await loadAssets();
     if (id === 'products') await loadProductsMaster();
     if (id === 'dev') await loadDev();
     if (id === 'bulk') { await bulkLoadSettings(); checkNaverHelper(); }
@@ -2256,6 +2402,276 @@ function invRowHtml(p) {
     </tr>`;
 }
 
+// ── 자산 관리 ───────────────────────────────────────────────────────
+// 분류는 일반기업회계기준 계정과목, 내용연수 기본값은 세법 기준내용연수(대표값) — 실제 신고는 세무사 확인
+const ASSET_TYPES = [
+  { key: 'tangible', label: '유형자산', sub: '형태가 있고 1년 넘게 쓰는 것', cats: [
+    ['토지', 0, '감가상각하지 않음'],
+    ['건물', 40, '철근콘크리트 40년 · 그 외 20년'],
+    ['구축물', 20, '담장 · 간판 · 창고 시설 등'],
+    ['기계장치', 8, '3D 프린터 · CNC · 선반 등 생산 설비 (업종에 따라 다름)'],
+    ['차량운반구', 5, '업무용 차량'],
+    ['공구와기구', 5, '금형 · 지그 · 측정기 · 전동공구 등'],
+    ['비품', 5, '컴퓨터 · 모니터 · 가구 · 카메라 등'],
+    ['건설중인자산', 0, '완성 전에는 감가상각하지 않음'],
+  ]},
+  { key: 'intangible', label: '무형자산', sub: '형태는 없지만 돈 주고 얻은 권리 · 프로그램', cats: [
+    ['소프트웨어', 5, 'CAD · 회계 프로그램 등 구입형 (월 구독료는 비용 정산으로)'],
+    ['산업재산권', 5, '특허권 10년 · 실용신안 · 디자인 · 상표권 5년'],
+    ['개발비', 5, '제품 개발에 쓴 돈 중 자산으로 잡은 것'],
+    ['영업권', 5, '사업을 인수하면서 더 낸 금액'],
+    ['기타무형자산', 5, '도메인 · 라이선스 등'],
+  ]},
+  { key: 'supplies', label: '소모품', sub: '1년 안에 쓰고 없어지는 것', cats: [
+    ['생산소모품', 0, '필라멘트 · 레진 · 접착제 · 볼트 · 너트'],
+    ['포장재', 0, '박스 · 완충재 · 테이프 · 라벨'],
+    ['공구소모품', 0, '드릴비트 · 사포 · 칼날'],
+    ['사무용품', 0, '프린터 용지 · 토너 · 문구'],
+    ['기타소모품', 0, ''],
+  ]},
+];
+const ASSET_STATUS = {
+  in_use: ['badge-green', '사용중'], stored: ['badge-gray', '보관'], repair: ['badge-yellow', '수리중'],
+  disposed: ['badge-red', '폐기'], sold: ['badge-gray', '매각'],
+};
+let ASSET_TAB = 'all';
+
+function assetTypeOf(key) { return ASSET_TYPES.find(t => t.key === key) || ASSET_TYPES[0]; }
+function assetIsGone(a) { return a.status === 'disposed' || a.status === 'sold'; }
+
+// 정액법 · 월할 (취득한 달부터 상각, 폐기·매각한 달까지)
+function assetCalc(a, asOf = new Date()) {
+  const cost = Number(a.acquired_cost) || 0;
+  const life = Number(a.useful_life_years) || 0;
+  if (a.asset_type === 'supplies' || !life || !a.acquired_date) return { book: cost, acc: 0, monthly: 0, ratio: 0, depreciable: false };
+  const start = new Date(a.acquired_date);
+  const end = a.disposed_date && assetIsGone(a) && new Date(a.disposed_date) < asOf ? new Date(a.disposed_date) : asOf;
+  const months = Math.max(0, (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1);
+  const base = Math.max(0, cost - (Number(a.residual_value) || 0));
+  const total = life * 12;
+  const used = Math.min(months, total);
+  const acc = Math.round(base * used / total);
+  const monthly = !assetIsGone(a) && months >= 1 && months <= total ? Math.round(base / total) : 0;
+  return { book: cost - acc, acc, monthly, ratio: total ? used / total : 0, depreciable: true, monthsLeft: total - used };
+}
+
+async function loadAssets() {
+  const [aR, pR] = await Promise.all([
+    sb.from('assets').select('*').order('acquired_date', { ascending: false, nullsFirst: false }),
+    state.partners && state.partners.length ? Promise.resolve({ data: state.partners }) : sb.from('partners').select('*').order('name'),
+  ]);
+  if (aR.error) throw new Error(aR.error.message);
+  setStatus(true);
+  state.assets = aR.data || [];
+  state.partners = pR.data || [];
+  renderAssets();
+}
+
+function renderAssets() {
+  const items = state.assets || [];
+  const live = items.filter(a => !assetIsGone(a));
+  const sumBy = (k, f) => live.filter(a => a.asset_type === k).reduce((s, a) => s + f(a), 0);
+  const short = live.filter(a => a.asset_type === 'supplies' && a.min_quantity != null && Number(a.quantity) < Number(a.min_quantity));
+  for (const k of ['tangible', 'intangible']) {
+    document.getElementById('kpi-asset-' + k).textContent = fmtShort(sumBy(k, a => assetCalc(a).book));
+    document.getElementById('kpi-asset-' + k + '-sub').textContent = `취득가 ${fmtShort(sumBy(k, a => Number(a.acquired_cost) || 0))} · ${live.filter(a => a.asset_type === k).length}건`;
+  }
+  document.getElementById('kpi-asset-supplies').textContent = fmtShort(sumBy('supplies', a => Number(a.acquired_cost) || 0));
+  document.getElementById('kpi-asset-supplies-sub').textContent = short.length ? `⚠ 재고 부족 ${short.length}건` : `${live.filter(a => a.asset_type === 'supplies').length}건 · 부족 없음`;
+  document.getElementById('kpi-asset-dep').textContent = fmtShort(live.reduce((s, a) => s + assetCalc(a).monthly, 0));
+  const badge = document.getElementById('nav-asset-badge');
+  badge.hidden = !short.length; badge.textContent = short.length;
+
+  // 탭: 전체 / 유형 / 무형 / 소모품
+  const tabs = [{ key: 'all', label: '전체', n: items.length }, ...ASSET_TYPES.map(t => ({ key: t.key, label: t.label, n: items.filter(a => a.asset_type === t.key).length }))];
+  const box = document.getElementById('asset-tabs');
+  box.innerHTML = tabs.map(t => `<button class="ptype-tab${t.key === ASSET_TAB ? ' active' : ''}" data-k="${t.key}">${t.label} <span class="cnt">${t.n}</span></button>`).join('');
+  box.querySelectorAll('.ptype-tab').forEach(b => b.onclick = () => { ASSET_TAB = b.dataset.k; renderAssets(); });
+
+  const tbody = document.getElementById('assets-tbody');
+  const groups = ASSET_TYPES.filter(t => ASSET_TAB === 'all' || ASSET_TAB === t.key)
+    .map(t => ({ ...t, items: items.filter(a => a.asset_type === t.key) }))
+    .filter(g => g.items.length || ASSET_TAB !== 'all');
+  if (!groups.some(g => g.items.length)) {
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state">
+      <div class="empty-icon">🗄️</div>
+      <div class="empty-title">등록된 자산 없음</div>
+      <div class="empty-desc">3D 프린터, 컴퓨터, CAD 프로그램, 포장재 같은 회사 자산을 등록해 보세요</div>
+      <button class="btn btn-primary" onclick="openAssetForm(null)">+ 자산 등록</button>
+    </div></td></tr>`;
+    return;
+  }
+  const showHead = ASSET_TAB === 'all';
+  tbody.innerHTML = groups.map(g =>
+    (showHead ? `<tr class="ptype-group-row"><td colspan="9">${g.label}<span class="sub">${g.sub} · ${g.items.length}건</span></td></tr>` : '') +
+    g.items.map(assetRowHtml).join('')
+  ).join('');
+}
+
+function assetRowHtml(a) {
+  const c = assetCalc(a);
+  const [stCls, stLabel] = ASSET_STATUS[a.status] || ['badge-gray', a.status];
+  const isSup = a.asset_type === 'supplies';
+  const lowStock = isSup && a.min_quantity != null && Number(a.quantity) < Number(a.min_quantity);
+  const qty = `${Number(a.quantity).toLocaleString('ko-KR')}${bulkEsc(a.unit || '')}`;
+  const book = c.depreciable
+    ? `${fmt(c.book)}<span class="asset-dep-bar" title="상각 ${Math.round(c.ratio * 100)}% · 남은 ${c.monthsLeft}개월"><i style="width:${Math.round(c.ratio * 100)}%"></i></span>`
+    : (isSup ? '<span style="color:var(--fg-faint)">—</span>' : fmt(c.book));
+  const where = [a.location, a.manager].filter(Boolean).map(bulkEsc).join(' · ') || '—';
+  return `<tr class="${assetIsGone(a) ? 'asset-gone' : ''}" onclick="openAssetForm(${a.id})">
+    <td><strong>${bulkEsc(a.name)}</strong>${a.model ? `<span class="asset-name-sub">${bulkEsc(a.model)}</span>` : ''}</td>
+    <td>${bulkEsc(a.category)}</td>
+    <td>${a.acquired_date || '—'}</td>
+    <td class="td-right td-mono">${fmt(a.acquired_cost)}</td>
+    <td class="td-right">${lowStock ? `<span class="badge badge-red" title="적정 재고 ${a.min_quantity}">${qty} 부족</span>` : qty}</td>
+    <td class="td-right td-mono">${book}</td>
+    <td>${where}</td>
+    <td><span class="badge ${stCls}">${stLabel}</span></td>
+    <td onclick="event.stopPropagation()">${isSup && !assetIsGone(a) ? `<button class="btn btn-outline btn-sm" onclick="adjustAssetQty(${a.id})">수량조정</button>` : ''}</td>
+  </tr>`;
+}
+
+function adjustAssetQty(id) {
+  const a = (state.assets || []).find(x => x.id === id);
+  if (!a) return;
+  const v = prompt(`[${a.name}] 남은 수량\n현재: ${a.quantity}${a.unit || ''}\n새 수량:`);
+  if (v === null || v === '') return;
+  const n = Number(v);
+  if (isNaN(n) || n < 0) { toast('올바른 숫자를 입력하세요'); return; }
+  sbPatch('assets', id, { quantity: n, updated_at: new Date().toISOString() })
+    .then(() => { a.quantity = n; renderAssets(); toast('수량이 조정되었습니다 ✓'); })
+    .catch(e => toast('오류: ' + e.message));
+}
+
+function openAssetForm(id) {
+  const a = id ? (state.assets || []).find(x => x.id === id) : null;
+  const v = (elId, val) => { document.getElementById(elId).value = val ?? ''; };
+  document.getElementById('as-title').textContent = a ? '자산 정보' : '자산 등록';
+  document.getElementById('as-delete').hidden = !a;
+  v('as-id', a?.id);
+  v('as-type', a?.asset_type || (ASSET_TAB !== 'all' ? ASSET_TAB : 'tangible'));
+  assetFillCats(a?.category);
+  v('as-name', a?.name); v('as-model', a?.model); v('as-serial', a?.serial_no);
+  v('as-date', a?.acquired_date || new Date().toISOString().slice(0, 10));
+  v('as-cost', a?.acquired_cost); v('as-qty', a?.quantity ?? 1); v('as-unit', a?.unit || '개');
+  v('as-residual', a?.residual_value ?? 0); v('as-min', a?.min_quantity);
+  v('as-location', a?.location); v('as-manager', a?.manager);
+  v('as-status', a?.status || 'in_use'); v('as-disposed', a?.disposed_date); v('as-memo', a?.memo);
+  const life = document.getElementById('as-life');
+  life.dataset.touched = a ? '1' : '';
+  if (a) life.value = a.useful_life_years ?? ''; else assetCatChanged();
+  const sel = document.getElementById('as-partner');
+  sel.innerHTML = '<option value="">—</option>' + (state.partners || []).map(p => `<option value="${p.id}">${bulkEsc(p.name)}</option>`).join('');
+  sel.value = a?.partner_id || '';
+  assetTypeChanged(true);
+  assetStatusChanged();
+  openOverlay('overlay-asset');
+}
+
+function assetFillCats(selected) {
+  const t = assetTypeOf(document.getElementById('as-type').value);
+  const sel = document.getElementById('as-cat');
+  sel.innerHTML = t.cats.map(([n]) => `<option>${n}</option>`).join('');
+  if (selected && !t.cats.some(([n]) => n === selected)) sel.add(new Option(selected, selected));
+  sel.value = selected || t.cats[0][0];
+}
+
+// 구분이 바뀌면 세부 분류 목록과 보이는 칸을 바꿈 (소모품은 상각 칸 대신 적정 재고)
+function assetTypeChanged(keepCat) {
+  if (!keepCat) { assetFillCats(); document.getElementById('as-life').dataset.touched = ''; assetCatChanged(); }
+  const isSup = document.getElementById('as-type').value === 'supplies';
+  document.getElementById('as-dep-row').hidden = isSup;
+  document.getElementById('as-min-row').hidden = !isSup;
+  assetCatHelp();
+  assetPreview();
+}
+
+// 세부 분류를 고르면 기본 내용연수를 채움 (직접 고친 값은 그대로 둠)
+function assetCatChanged() {
+  const t = assetTypeOf(document.getElementById('as-type').value);
+  const cat = t.cats.find(([n]) => n === document.getElementById('as-cat').value);
+  const life = document.getElementById('as-life');
+  if (cat && !life.dataset.touched) life.value = cat[1] || '';
+  assetCatHelp();
+  assetPreview();
+}
+
+function assetCatHelp() {
+  const t = assetTypeOf(document.getElementById('as-type').value);
+  const cat = t.cats.find(([n]) => n === document.getElementById('as-cat').value);
+  const life = cat && t.key !== 'supplies' ? (cat[1] ? ` · 기본 내용연수 ${cat[1]}년` : '') : '';
+  document.getElementById('as-cat-help').textContent = cat ? (cat[2] || '') + life : '';
+}
+
+function assetStatusChanged() {
+  const gone = ['disposed', 'sold'].includes(document.getElementById('as-status').value);
+  document.getElementById('as-disposed-row').hidden = !gone;
+}
+
+// 폼에서 고른 값으로 장부가액 미리 계산
+function assetPreview() {
+  const box = document.getElementById('as-preview');
+  const a = assetFormRow();
+  if (a.asset_type === 'supplies' || !a.acquired_cost) { box.innerHTML = ''; return; }
+  const c = assetCalc(a);
+  box.innerHTML = c.depreciable
+    ? `현재 장부가액 <b>${fmt(c.book)}</b> · 누적 상각 ${fmt(c.acc)} (${Math.round(c.ratio * 100)}%)<br>
+       매달 감가상각비 약 <b>${fmt(Math.round((a.acquired_cost - a.residual_value) / (a.useful_life_years * 12)))}</b> · 남은 기간 ${Math.floor(c.monthsLeft / 12)}년 ${c.monthsLeft % 12}개월`
+    : `감가상각하지 않음 — 장부가액 = 취득가 <b>${fmt(c.book)}</b>`;
+}
+
+function assetFormRow() {
+  const g = id => document.getElementById(id).value.trim();
+  const num = id => g(id) === '' ? null : Number(g(id));
+  const type = g('as-type');
+  const status = g('as-status');
+  return {
+    asset_type: type,
+    category: g('as-cat'),
+    name: g('as-name'),
+    model: g('as-model') || null,
+    serial_no: g('as-serial') || null,
+    acquired_date: g('as-date') || null,
+    acquired_cost: num('as-cost') || 0,
+    quantity: num('as-qty') ?? 1,
+    unit: g('as-unit') || '개',
+    min_quantity: type === 'supplies' ? num('as-min') : null,
+    useful_life_years: type === 'supplies' ? null : num('as-life'),
+    residual_value: type === 'supplies' ? 0 : (num('as-residual') || 0),
+    location: g('as-location') || null,
+    manager: g('as-manager') || null,
+    partner_id: num('as-partner'),
+    status,
+    disposed_date: ['disposed', 'sold'].includes(status) ? (g('as-disposed') || null) : null,
+    memo: g('as-memo') || null,
+  };
+}
+
+async function saveAsset() {
+  const row = assetFormRow();
+  if (!row.name) { toast('자산명을 입력하세요'); return; }
+  if (row.acquired_cost < 0 || row.residual_value > row.acquired_cost) { toast('잔존가치는 취득가보다 클 수 없어요'); return; }
+  const id = Number(document.getElementById('as-id').value) || null;
+  try {
+    if (id) await sbPatch('assets', id, { ...row, updated_at: new Date().toISOString() });
+    else await sbPost('assets', row);
+    closeOverlay('overlay-asset');
+    await loadAssets();
+    toast(id ? '자산 정보가 저장되었습니다 ✓' : '자산이 등록되었습니다 ✓');
+  } catch (e) { toast('오류: ' + e.message); }
+}
+
+async function deleteAsset() {
+  const id = Number(document.getElementById('as-id').value);
+  if (!id) return;
+  if (!confirm('이 자산을 목록에서 완전히 지울까요?\n(팔았거나 버린 자산은 지우지 말고 상태를 "폐기" · "매각"으로 바꾸면 기록이 남아요)')) return;
+  const { error } = await sb.from('assets').delete().eq('id', id);
+  if (error) { toast('삭제 실패: ' + error.message); return; }
+  closeOverlay('overlay-asset');
+  await loadAssets();
+  toast('자산을 삭제했습니다');
+}
+
 async function loadOrders() {
   const { data: items, error } = await sb.from('purchase_orders')
     .select('*,partners(name)').order('order_date', {ascending:false});
@@ -2308,7 +2724,7 @@ function saleRowHtml(s) {
     const shipBtn = canShip
       ? `<button class="btn btn-outline btn-sm" onclick="openShipForm(${s.id},'${bulkEsc(s.channel)}','${bulkEsc((s.order_no||'').replace(/['\\]/g,''))}')">🚚 배송처리</button>`
       : (s.tracking_no ? `<span style="font-size:11px;color:var(--fg-faint)">${bulkEsc(s.tracking_no)}</span>` : '—');
-    return `<tr>
+    return `<tr${isVoidSale(s) ? ' class="sale-void"' : ''}>
     <td><span class="badge" style="background:${getChannelColor(s.channel)}22;color:${getChannelColor(s.channel)};border:1px solid ${getChannelColor(s.channel)}44">${bulkEsc(s.channel)}</span></td>
     <td>${bulkEsc(s.product_name || s.products?.name || (s.memo && s.memo.includes('|') ? s.memo.split('|')[0].trim() : (s.memo || '—')))}</td>
     <td class="td-center">${s.qty}</td>
@@ -2329,7 +2745,7 @@ async function loadPartners() {
 
   const tbody = document.getElementById('partners-tbody');
   if (items.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">
+    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state">
       <div class="empty-icon">🤝</div>
       <div class="empty-title">등록된 거래처 없음</div>
       <button class="btn btn-primary" onclick="openPartner(null)">+ 거래처 등록</button>
@@ -2337,9 +2753,17 @@ async function loadPartners() {
     return;
   }
   tbody.innerHTML = items.map(p => {
-    const docCount = PARTNER_DOCS.filter(d => p.docs && p.docs[d.key]).length;
+    // 서류 칸: 있으면 바로 내려받기, 없으면 바로 첨부 (파일을 칸에 끌어다 놓아도 됨)
+    const docCells = PARTNER_DOCS.map(d => {
+      const has = p.docs && p.docs[d.key];
+      return `<td class="td-center" onclick="event.stopPropagation()"
+        ondragover="event.preventDefault();this.classList.add('pt-cell-over')" ondragleave="this.classList.remove('pt-cell-over')"
+        ondrop="event.preventDefault();this.classList.remove('pt-cell-over');partnerDocQuickAttach(${p.id},'${d.key}',event.dataTransfer.files[0])">${has
+        ? `<button class="btn btn-primary btn-sm" onclick="partnerDocQuickDownload(${p.id},'${d.key}')" title="${bulkEsc(has.name)}">⬇ 다운</button>`
+        : `<button class="btn btn-outline btn-sm" onclick="partnerDocQuickPick(${p.id},'${d.key}')">+ 첨부</button>`}</td>`;
+    }).join('');
     return `<tr onclick="openPartner(${p.id})" title="눌러서 정보·서류 보기">
-    <td><strong>${bulkEsc(p.name)}</strong>${docCount ? `<span class="pt-doc-count">📎 ${docCount}</span>` : ''}</td>
+    <td><strong>${bulkEsc(p.name)}</strong></td>
     <td>${statusBadge(p.type)}</td>
     <td>${bulkEsc(p.contact || '—')}</td>
     <td>${bulkEsc(p.phone || '—')}</td>
@@ -2347,7 +2771,8 @@ async function loadPartners() {
     <td>${p.website
       ? `<a class="btn btn-outline btn-sm" href="${bulkEsc(partnerUrl(p.website))}" target="_blank" rel="noopener" title="${bulkEsc(p.website)}" onclick="event.stopPropagation()">🔗 바로가기</a>`
       : '—'}</td>
-    <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bulkEsc(p.memo || '')}</td>
+    ${docCells}
+    <td class="pt-memo" title="${bulkEsc(p.memo || '')}">${bulkEsc(p.memo || '')}</td>
   </tr>`;
   }).join('');
 }
@@ -2411,12 +2836,60 @@ function ptDocPick(key) {
   inp.click();
 }
 
+// 첨부할 수 없는 파일이면 이유, 괜찮으면 null
+function partnerDocProblem(f) {
+  if (!f) return '파일이 없습니다';
+  if (!/^image\/|^application\/pdf$/.test(f.type)) return '사진이나 PDF 파일만 첨부할 수 있어요';
+  if (f.size > 20 * 1024 * 1024) return '20MB 이하 파일만 올릴 수 있어요';
+  return null;
+}
+
 function ptDocSet(key, f) {
   if (!f) return;
-  if (!/^image\/|^application\/pdf$/.test(f.type)) { toast('사진이나 PDF 파일만 첨부할 수 있어요'); return; }
-  if (f.size > 20 * 1024 * 1024) { toast('20MB 이하 파일만 올릴 수 있어요'); return; }
+  const problem = partnerDocProblem(f);
+  if (problem) { toast(problem); return; }
   ptDocState.pending[key] = f;
   renderPartnerDocs();
+}
+
+// ── 거래처 목록에서 바로 첨부 / 내려받기 ──
+function partnerDocQuickPick(partnerId, key) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*,application/pdf';
+  inp.onchange = () => partnerDocQuickAttach(partnerId, key, inp.files[0]);
+  inp.click();
+}
+
+async function partnerDocQuickAttach(partnerId, key, f) {
+  if (!f) return;
+  const problem = partnerDocProblem(f);
+  if (problem) { toast(problem); return; }
+  const p = (state.partners || []).find(x => x.id === partnerId);
+  if (!p) return;
+  const label = PARTNER_DOCS.find(d => d.key === key).label;
+  try {
+    toast(`${label} 올리는 중...`);
+    const old = p.docs && p.docs[key];
+    const doc = await uploadPartnerDoc(partnerId, key, f);
+    await sbPatch('partners', partnerId, { docs: { ...(p.docs || {}), [key]: doc } });
+    if (old) await sb.storage.from('partner-docs').remove([old.path]);
+    await loadPartners();
+    toast(`${p.name} ${label} 첨부 완료 ✓`);
+  } catch (e) { toast('첨부 실패: ' + e.message, 5000); }
+}
+
+function partnerDocQuickDownload(partnerId, key) {
+  const p = (state.partners || []).find(x => x.id === partnerId);
+  if (p && p.docs && p.docs[key]) downloadPartnerDoc(p.name, key, p.docs[key]);
+}
+
+async function uploadPartnerDoc(partnerId, key, f) {
+  const ext = (f.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+  const path = `${partnerId}/${key}_${Date.now()}${ext}`;   // 한글 파일명은 저장소 경로에 쓰지 않음
+  const { error } = await sb.storage.from('partner-docs').upload(path, f, { contentType: f.type || undefined });
+  if (error) throw new Error(`${PARTNER_DOCS.find(d => d.key === key).label} 올리기 실패: ${error.message}`);
+  return { path, name: f.name, size: f.size };
 }
 function ptDocCancel(key) { delete ptDocState.pending[key]; renderPartnerDocs(); }
 function ptDocRemove(key) {
@@ -2427,12 +2900,14 @@ function ptDocRemove(key) {
 }
 
 // 1분짜리 임시 주소로 바로 내려받기 (파일명: 거래처명_서류종류.확장자)
-async function ptDocDownload(key) {
+function ptDocDownload(key) {
   const doc = ptDocState.saved[key];
-  if (!doc) return;
+  if (doc) downloadPartnerDoc(document.getElementById('pt-name').value.trim() || '거래처', key, doc);
+}
+
+async function downloadPartnerDoc(partnerName, key, doc) {
   const label = PARTNER_DOCS.find(d => d.key === key).label;
   const ext = (doc.name.match(/\.[^.]+$/) || [''])[0];
-  const partnerName = document.getElementById('pt-name').value.trim() || '거래처';
   const { data, error } = await sb.storage.from('partner-docs')
     .createSignedUrl(doc.path, 60, { download: `${partnerName}_${label}${ext}` });
   if (error) { toast('내려받기 실패: ' + error.message); return; }
@@ -2446,12 +2921,9 @@ async function savePartnerDocs(partnerId) {
   const docs = { ...ptDocState.saved };
   const oldPaths = Object.values(ptDocState.removed).filter(Boolean).map(d => d.path);
   for (const [key, f] of Object.entries(ptDocState.pending)) {
-    const ext = (f.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
-    const path = `${partnerId}/${key}_${Date.now()}${ext}`;   // 한글 파일명은 저장소 경로에 쓰지 않음
-    const { error } = await sb.storage.from('partner-docs').upload(path, f, { contentType: f.type || undefined });
-    if (error) throw new Error(`${PARTNER_DOCS.find(d => d.key === key).label} 올리기 실패: ${error.message}`);
+    const doc = await uploadPartnerDoc(partnerId, key, f);
     if (docs[key]) oldPaths.push(docs[key].path);
-    docs[key] = { path, name: f.name, size: f.size };
+    docs[key] = doc;
   }
   await sbPatch('partners', partnerId, { docs });
   if (oldPaths.length) await sb.storage.from('partner-docs').remove(oldPaths);
