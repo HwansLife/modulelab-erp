@@ -1140,6 +1140,11 @@ tr.asset-gone td { color: var(--fg-faint); }
           <div class="kpi-delta" id="kpi-asset-supplies-sub">—</div>
         </div>
         <div class="kpi-card">
+          <div class="kpi-label">보증금 · 기타</div>
+          <div class="kpi-value" id="kpi-asset-other">—</div>
+          <div class="kpi-delta" id="kpi-asset-other-sub">—</div>
+        </div>
+        <div class="kpi-card">
           <div class="kpi-label">이번 달 감가상각비</div>
           <div class="kpi-value warn" id="kpi-asset-dep">—</div>
           <div class="kpi-delta">유형 + 무형 (추정)</div>
@@ -1763,6 +1768,7 @@ tr.asset-gone td { color: var(--fg-faint); }
             <option value="tangible">유형자산</option>
             <option value="intangible">무형자산</option>
             <option value="supplies">소모품</option>
+            <option value="other">보증금·기타</option>
           </select>
         </div>
         <div class="field"><label>세부 분류 *</label><select id="as-cat" onchange="assetCatChanged()"></select></div>
@@ -2409,6 +2415,7 @@ const ASSET_TYPES = [
     ['토지', 0, '감가상각하지 않음'],
     ['건물', 40, '철근콘크리트 40년 · 그 외 20년'],
     ['구축물', 20, '담장 · 간판 · 창고 시설 등'],
+    ['시설장치', 5, '빌린 매장 · 사무실 인테리어 (바닥 · 조명 · 칸막이 공사 등)'],
     ['기계장치', 8, '3D 프린터 · CNC · 선반 등 생산 설비 (업종에 따라 다름)'],
     ['차량운반구', 5, '업무용 차량'],
     ['공구와기구', 5, '금형 · 지그 · 측정기 · 전동공구 등'],
@@ -2429,6 +2436,11 @@ const ASSET_TYPES = [
     ['사무용품', 0, '프린터 용지 · 토너 · 문구'],
     ['기타소모품', 0, ''],
   ]},
+  { key: 'other', label: '보증금·기타', sub: '나중에 돌려받는 돈 (감가상각 없음)', cats: [
+    ['임차보증금', 0, '매장 · 사무실 · 창고 보증금'],
+    ['기타보증금', 0, '전화 · 전기 · 렌탈 보증금 등'],
+    ['기타자산', 0, ''],
+  ]},
 ];
 const ASSET_STATUS = {
   in_use: ['badge-green', '사용중'], stored: ['badge-gray', '보관'], repair: ['badge-yellow', '수리중'],
@@ -2443,7 +2455,7 @@ function assetIsGone(a) { return a.status === 'disposed' || a.status === 'sold';
 function assetCalc(a, asOf = new Date()) {
   const cost = Number(a.acquired_cost) || 0;
   const life = Number(a.useful_life_years) || 0;
-  if (a.asset_type === 'supplies' || !life || !a.acquired_date) return { book: cost, acc: 0, monthly: 0, ratio: 0, depreciable: false };
+  if (a.asset_type === 'supplies' || a.asset_type === 'other' || !life || !a.acquired_date) return { book: cost, acc: 0, monthly: 0, ratio: 0, depreciable: false };
   const start = new Date(a.acquired_date);
   const end = a.disposed_date && assetIsGone(a) && new Date(a.disposed_date) < asOf ? new Date(a.disposed_date) : asOf;
   const months = Math.max(0, (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1);
@@ -2479,6 +2491,8 @@ function renderAssets() {
   document.getElementById('kpi-asset-supplies').textContent = fmtShort(sumBy('supplies', a => Number(a.acquired_cost) || 0));
   document.getElementById('kpi-asset-supplies-sub').textContent = short.length ? `⚠ 재고 부족 ${short.length}건` : `${live.filter(a => a.asset_type === 'supplies').length}건 · 부족 없음`;
   document.getElementById('kpi-asset-dep').textContent = fmtShort(live.reduce((s, a) => s + assetCalc(a).monthly, 0));
+  document.getElementById('kpi-asset-other').textContent = fmtShort(sumBy('other', a => Number(a.acquired_cost) || 0));
+  document.getElementById('kpi-asset-other-sub').textContent = `${live.filter(a => a.asset_type === 'other').length}건 · 돌려받을 돈`;
   const badge = document.getElementById('nav-asset-badge');
   badge.hidden = !short.length; badge.textContent = short.length;
 
@@ -2579,9 +2593,9 @@ function assetFillCats(selected) {
 // 구분이 바뀌면 세부 분류 목록과 보이는 칸을 바꿈 (소모품은 상각 칸 대신 적정 재고)
 function assetTypeChanged(keepCat) {
   if (!keepCat) { assetFillCats(); document.getElementById('as-life').dataset.touched = ''; assetCatChanged(); }
-  const isSup = document.getElementById('as-type').value === 'supplies';
-  document.getElementById('as-dep-row').hidden = isSup;
-  document.getElementById('as-min-row').hidden = !isSup;
+  const type = document.getElementById('as-type').value;
+  document.getElementById('as-dep-row').hidden = type === 'supplies' || type === 'other';   // 상각 없는 구분
+  document.getElementById('as-min-row').hidden = type !== 'supplies';
   assetCatHelp();
   assetPreview();
 }
@@ -2612,7 +2626,7 @@ function assetStatusChanged() {
 function assetPreview() {
   const box = document.getElementById('as-preview');
   const a = assetFormRow();
-  if (a.asset_type === 'supplies' || !a.acquired_cost) { box.innerHTML = ''; return; }
+  if (a.asset_type === 'supplies' || a.asset_type === 'other' || !a.acquired_cost) { box.innerHTML = ''; return; }
   const c = assetCalc(a);
   box.innerHTML = c.depreciable
     ? `현재 장부가액 <b>${fmt(c.book)}</b> · 누적 상각 ${fmt(c.acc)} (${Math.round(c.ratio * 100)}%)<br>
@@ -2636,8 +2650,8 @@ function assetFormRow() {
     quantity: num('as-qty') ?? 1,
     unit: g('as-unit') || '개',
     min_quantity: type === 'supplies' ? num('as-min') : null,
-    useful_life_years: type === 'supplies' ? null : num('as-life'),
-    residual_value: type === 'supplies' ? 0 : (num('as-residual') || 0),
+    useful_life_years: type === 'supplies' || type === 'other' ? null : num('as-life'),
+    residual_value: type === 'supplies' || type === 'other' ? 0 : (num('as-residual') || 0),
     location: g('as-location') || null,
     manager: g('as-manager') || null,
     partner_id: num('as-partner'),
