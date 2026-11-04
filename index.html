@@ -1971,21 +1971,20 @@ async function loadOverview() {
   document.getElementById('overview-date').textContent =
     new Date().toLocaleDateString('ko-KR', {year:'numeric',month:'long',day:'numeric', weekday:'long'});
 
-  const [pR, ptR, sR, dR] = await Promise.all([
-    sb.from('products').select('id,name,stock'),
-    sb.from('partners').select('id'),
+  // 제품·거래처는 다른 화면(매출 입력, 발주 등)에서도 쓰므로 한 번에 전체를 받아 둠
+  const [pR, ptR, sR, dR, rsR] = await Promise.all([
+    sb.from('products').select('*').order('name', {ascending:true}),
+    sb.from('partners').select('*').order('name', {ascending:true}),
     sb.from('sales_orders').select('amount,order_date,channel,qty,status'),
     sb.from('dev_projects').select('id,status'),
+    sb.from('sales_orders').select('*,products(name)').order('order_date', {ascending:false}).limit(8),
   ]);
   if (pR.error) throw new Error(pR.error.message);
   setStatus(true);
 
-  const products = pR.data, partners = ptR.data, sales = sR.data, devs = dR.data;
-
-  const pAll = await sb.from('products').select('*').order('name', {ascending:true});
-  const ptAll = await sb.from('partners').select('*').order('name', {ascending:true});
-  state.products = pAll.data || [];
-  state.partners = ptAll.data || [];
+  const products = pR.data || [], partners = ptR.data || [], sales = sR.data || [], devs = dR.data || [];
+  state.products = products;
+  state.partners = partners;
 
   // KPIs
   const now = new Date();
@@ -2002,9 +2001,6 @@ async function loadOverview() {
   document.getElementById('kpi-shipping').textContent = pendingShipping;
 
   // Recent sales table
-  const rsR = await sb.from('sales_orders')
-    .select('*,products(name)')
-    .order('order_date', {ascending:false}).limit(8);
   const recentSales = rsR.data || [];
   const tbody = document.getElementById('recent-sales-tbody');
   if (recentSales.length === 0) {
@@ -2245,14 +2241,14 @@ function invRowHtml(p) {
         ? `<span class="badge badge-yellow">${p.stock}</span>`
         : `<span class="badge badge-green">${p.stock}</span>`;
     return `<tr>
-      <td class="td-mono">${p.sku || '—'}</td>
-      <td><strong>${p.name}</strong></td>
-      <td>${p.category || '—'}</td>
+      <td class="td-mono">${bulkEsc(p.sku || '—')}</td>
+      <td><strong>${bulkEsc(p.name)}</strong></td>
+      <td>${bulkEsc(p.category || '—')}</td>
       <td class="td-right td-mono">${fmt(p.cost_price)}</td>
       <td class="td-right td-mono">${fmt(p.sell_price)}</td>
       <td class="td-center">${stockBadge}</td>
       <td>
-        <button class="btn btn-outline btn-sm" onclick="adjustStock(${p.id},'${p.name}',${p.stock})">재고조정</button>
+        <button class="btn btn-outline btn-sm" onclick="adjustStock(${p.id})">재고조정</button>
       </td>
       <td>
         <button class="btn btn-primary btn-sm" onclick="openChannelRegister(${p.id})">📤 등록</button>
@@ -2276,8 +2272,8 @@ async function loadOrders() {
     return;
   }
   tbody.innerHTML = items.map(o => `<tr>
-    <td class="td-mono">${o.po_number || '—'}</td>
-    <td>${o.partners?.name || '—'}</td>
+    <td class="td-mono">${bulkEsc(o.po_number || '—')}</td>
+    <td>${bulkEsc(o.partners?.name || '—')}</td>
     <td>${o.order_date || '—'}</td>
     <td>${o.delivery_date || '—'}</td>
     <td class="td-right td-mono">${fmt(o.total_amount)}</td>
@@ -2310,17 +2306,17 @@ async function loadSales() {
 function saleRowHtml(s) {
     const canShip = ['paid','pending'].includes(s.status);
     const shipBtn = canShip
-      ? `<button class="btn btn-outline btn-sm" onclick="openShipForm(${s.id},'${s.channel}','${(s.order_no||'').replace(/'/g,"\\'")}')">🚚 배송처리</button>`
-      : (s.tracking_no ? `<span style="font-size:11px;color:var(--fg-faint)">${s.tracking_no}</span>` : '—');
+      ? `<button class="btn btn-outline btn-sm" onclick="openShipForm(${s.id},'${bulkEsc(s.channel)}','${bulkEsc((s.order_no||'').replace(/['\\]/g,''))}')">🚚 배송처리</button>`
+      : (s.tracking_no ? `<span style="font-size:11px;color:var(--fg-faint)">${bulkEsc(s.tracking_no)}</span>` : '—');
     return `<tr>
-    <td><span class="badge" style="background:${getChannelColor(s.channel)}22;color:${getChannelColor(s.channel)};border:1px solid ${getChannelColor(s.channel)}44">${s.channel}</span></td>
-    <td>${s.product_name || s.products?.name || (s.memo && s.memo.includes('|') ? s.memo.split('|')[0].trim() : (s.memo || '—'))}</td>
+    <td><span class="badge" style="background:${getChannelColor(s.channel)}22;color:${getChannelColor(s.channel)};border:1px solid ${getChannelColor(s.channel)}44">${bulkEsc(s.channel)}</span></td>
+    <td>${bulkEsc(s.product_name || s.products?.name || (s.memo && s.memo.includes('|') ? s.memo.split('|')[0].trim() : (s.memo || '—')))}</td>
     <td class="td-center">${s.qty}</td>
     <td class="td-right td-mono">${fmt(s.unit_price)}</td>
     <td class="td-right td-mono">${fmt(s.amount)}</td>
     <td>${s.order_date || '—'}</td>
     <td>${statusBadge(s.status)}</td>
-    <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.memo && s.memo.includes('|') ? s.memo.split('|')[1].trim() : (s.memo || '')}</td>
+    <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bulkEsc(s.memo && s.memo.includes('|') ? s.memo.split('|')[1].trim() : (s.memo || ''))}</td>
     <td>${shipBtn}</td>
   </tr>`;
 }
@@ -2345,13 +2341,13 @@ async function loadPartners() {
     return `<tr onclick="openPartner(${p.id})" title="눌러서 정보·서류 보기">
     <td><strong>${bulkEsc(p.name)}</strong>${docCount ? `<span class="pt-doc-count">📎 ${docCount}</span>` : ''}</td>
     <td>${statusBadge(p.type)}</td>
-    <td>${p.contact || '—'}</td>
-    <td>${p.phone || '—'}</td>
-    <td>${p.email || '—'}</td>
+    <td>${bulkEsc(p.contact || '—')}</td>
+    <td>${bulkEsc(p.phone || '—')}</td>
+    <td>${bulkEsc(p.email || '—')}</td>
     <td>${p.website
       ? `<a class="btn btn-outline btn-sm" href="${bulkEsc(partnerUrl(p.website))}" target="_blank" rel="noopener" title="${bulkEsc(p.website)}" onclick="event.stopPropagation()">🔗 바로가기</a>`
       : '—'}</td>
-    <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.memo || ''}</td>
+    <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bulkEsc(p.memo || '')}</td>
   </tr>`;
   }).join('');
 }
@@ -2496,10 +2492,10 @@ async function loadExpenses() {
   }
   tbody.innerHTML = items.map(e => `<tr>
     <td>${e.date}</td>
-    <td><span class="badge badge-gray">${e.category || '—'}</span></td>
-    <td>${e.description || '—'}</td>
+    <td><span class="badge badge-gray">${bulkEsc(e.category || '—')}</span></td>
+    <td>${bulkEsc(e.description || '—')}</td>
     <td class="td-right td-mono">${fmt(e.amount)}</td>
-    <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.memo || ''}</td>
+    <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bulkEsc(e.memo || '')}</td>
   </tr>`).join('');
 }
 
@@ -2535,9 +2531,9 @@ async function loadDev() {
       ${stItems.length === 0
         ? `<div style="color:var(--fg-faint);font-size:12px;text-align:center;padding:8px">—</div>`
         : stItems.map(d => `<div class="kanban-item" onclick="openDevForm(${d.id})" style="cursor:pointer">
-            <div class="kanban-item-name">${d.name}</div>
+            <div class="kanban-item-name">${bulkEsc(d.name)}</div>
             ${d.target_date ? `<div class="kanban-item-date">목표: ${d.target_date}</div>` : ''}
-            ${d.memo ? `<div class="kanban-item-date">${d.memo.slice(0,40)}${d.memo.length>40?'...':''}</div>` : ''}
+            ${d.memo ? `<div class="kanban-item-date">${bulkEsc(d.memo.slice(0,40))}${d.memo.length>40?'...':''}</div>` : ''}
           </div>`).join('')
       }
     </div>`;
@@ -2928,8 +2924,11 @@ async function receiveOrder(id) {
   } catch(e) { toast('오류: ' + e.message); }
 }
 
-function adjustStock(id, name, current) {
-  const qty = prompt(`[${name}] 재고 조정\n현재: ${current}개\n새 재고 수량:`);
+// 이름을 버튼에 직접 넣지 않고 id로 찾음 (이름에 ' 가 있으면 버튼이 고장나므로)
+function adjustStock(id) {
+  const p = (state.products || []).find(x => x.id === id);
+  if (!p) return;
+  const qty = prompt(`[${p.name}] 재고 조정\n현재: ${p.stock}개\n새 재고 수량:`);
   if (qty === null || qty === '') return;
   const n = parseInt(qty);
   if (isNaN(n)) { toast('올바른 숫자를 입력하세요'); return; }
@@ -2973,7 +2972,7 @@ function renderProductsGrid() {
 
 function productCardHtml(p) {
     const imgHtml = p.image_url
-      ? `<img src="${p.image_url}" alt="${p.name}" onerror="this.parentElement.innerHTML='📷'">`
+      ? `<img src="${bulkEsc(p.image_url)}" alt="${bulkEsc(p.name)}" onerror="this.parentElement.innerHTML='📷'">`
       : '📷';
     const priceKrw = p.sell_price ? Number(p.sell_price).toLocaleString('ko-KR') + '원' : '—';
     const priceUsd = p.price_usd ? '$' + Number(p.price_usd).toFixed(2) : '';
@@ -2985,8 +2984,8 @@ function productCardHtml(p) {
     return `<div class="product-card${p.active === false ? ' product-inactive' : ''}" onclick="openProductForm(${p.id})">
       <div class="product-card-img">${imgHtml}</div>
       <div class="product-card-body">
-        <div class="product-card-sku">${p.sku || '—'}</div>
-        <div class="product-card-name">${p.name}</div>
+        <div class="product-card-sku">${bulkEsc(p.sku || '—')}</div>
+        <div class="product-card-name">${bulkEsc(p.name)}</div>
         <div class="product-card-meta">
           ${badge}
           ${weight ? `<span>⚖️ ${weight}</span>` : ''}
@@ -3232,12 +3231,13 @@ function batchShowResults(products) {
 
   content.innerHTML = valid.map(p => `
     <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
-      ${p.main_image ? `<img src="${p.main_image}" style="width:56px;height:56px;object-fit:contain;border-radius:4px;border:1px solid var(--border);background:#fff">` : '<div style="width:56px;height:56px;background:var(--surface);border-radius:4px;border:1px solid var(--border)"></div>'}
+      ${p.main_image ? `<img src="${bulkEsc(p.main_image)}" style="width:56px;height:56px;object-fit:contain;border-radius:4px;border:1px solid var(--border);background:#fff">` : '<div style="width:56px;height:56px;background:var(--surface);border-radius:4px;border:1px solid var(--border)"></div>'}
       <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-weight:600;color:var(--fg-sub);margin-bottom:2px">${p.sku}</div>
-        <div style="font-size:13px;color:var(--fg);margin-bottom:4px;word-break:break-all">${p.name}</div>
-        <div style="font-size:12px;color:var(--fg-sub)">${p.price ? p.price.toLocaleString()+'원' : '가격 미확인'} · ${p.brand || ''}</div>
-        ${p.source_url ? `<a href="${p.source_url}" target="_blank" style="font-size:11px;color:#3b82f6">소스 확인 →</a>` : ''}
+        <!-- 다른 사이트에서 긁어온 값이라 반드시 이스케이프 -->
+        <div style="font-size:12px;font-weight:600;color:var(--fg-sub);margin-bottom:2px">${bulkEsc(p.sku)}</div>
+        <div style="font-size:13px;color:var(--fg);margin-bottom:4px;word-break:break-all">${bulkEsc(p.name)}</div>
+        <div style="font-size:12px;color:var(--fg-sub)">${p.price ? Number(p.price).toLocaleString()+'원' : '가격 미확인'} · ${bulkEsc(p.brand || '')}</div>
+        ${/^https?:\/\//i.test(p.source_url || '') ? `<a href="${bulkEsc(p.source_url)}" target="_blank" rel="noopener" style="font-size:11px;color:#3b82f6">소스 확인 →</a>` : ''}
       </div>
     </div>`).join('');
   area.style.display = 'block';
