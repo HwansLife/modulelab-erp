@@ -810,9 +810,13 @@ tr:hover td { background: var(--surface2); }
         </div>
         <div class="card-body-p0 tbl-wrap">
           <table>
-            <thead><tr><th>채널</th><th>제품</th><th>수량</th><th class="td-right">금액</th><th>날짜</th></tr></thead>
+            <thead><tr>
+              <th>채널</th><th>제품</th><th>수량</th>
+              <th class="td-right">단가</th><th class="td-right">금액</th>
+              <th>날짜</th><th>상태</th><th>메모</th><th>배송</th>
+            </tr></thead>
             <tbody id="recent-sales-tbody">
-              <tr><td colspan="5"><div class="spinner"></div></td></tr>
+              <tr><td colspan="9"><div class="spinner"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -1920,12 +1924,12 @@ async function loadOverview() {
 
   // Recent sales table
   const rsR = await sb.from('sales_orders')
-    .select('channel,amount,qty,order_date,memo,product_name,status,products(name)')
-    .order('order_date', {ascending:false}).limit(6);
+    .select('*,products(name)')
+    .order('order_date', {ascending:false}).limit(8);
   const recentSales = rsR.data || [];
   const tbody = document.getElementById('recent-sales-tbody');
   if (recentSales.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5">
+    tbody.innerHTML = `<tr><td colspan="9">
       <div class="empty-state">
         <div class="empty-icon">💰</div>
         <div class="empty-title">매출 기록 없음</div>
@@ -1933,16 +1937,7 @@ async function loadOverview() {
         <button class="btn btn-primary" onclick="openOverlay('overlay-sale')">+ 매출 입력</button>
       </div></td></tr>`;
   } else {
-    tbody.innerHTML = recentSales.map(s => {
-      const voided = isVoidSale(s);
-      return `<tr${voided ? ' style="opacity:.55"' : ''}>
-      <td><span class="badge" style="background:${getChannelColor(s.channel)}22;color:${getChannelColor(s.channel)};border:1px solid ${getChannelColor(s.channel)}44">${s.channel}</span></td>
-      <td>${s.product_name || s.products?.name || (s.memo && s.memo.includes('|') ? s.memo.split('|')[0].trim() : (s.memo || '—'))}${voided ? ' ' + statusBadge(s.status) : ''}</td>
-      <td class="td-center">${s.qty}</td>
-      <td class="td-right td-mono"${voided ? ' style="text-decoration:line-through"' : ''}>${fmt(s.amount)}</td>
-      <td>${s.order_date}</td>
-    </tr>`;
-    }).join('');
+    tbody.innerHTML = recentSales.map(saleRowHtml).join('');
   }
 
   // Charts
@@ -1995,8 +1990,8 @@ function drawSalesChart(sales) {
         },
         tooltip: {
           callbacks: {
-            label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.raw)}원`,
-            footer: items => '합계 ' + fmt(items.reduce((a, i) => a + i.raw, 0)) + '원'
+            label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.raw)}`,   // fmt가 '원'까지 붙임
+            footer: items => '합계 ' + fmt(items.reduce((a, i) => a + i.raw, 0))
           },
           filter: item => item.raw > 0
         }
@@ -2093,7 +2088,7 @@ function drawChannelChart(sales) {
         },
         tooltip: {
           callbacks: {
-            label: ctx => ` ${fmt(ctx.raw)}원`
+            label: ctx => ` ${fmt(ctx.raw)}`
           }
         }
       }
@@ -2190,7 +2185,11 @@ async function loadSales() {
     </div></td></tr>`;
     return;
   }
-  tbody.innerHTML = items.map(s => {
+  tbody.innerHTML = items.map(saleRowHtml).join('');
+}
+
+// 매출 현황 한 줄 (대시보드 최근 주문도 같은 모양으로 씀)
+function saleRowHtml(s) {
     const canShip = ['paid','pending'].includes(s.status);
     const shipBtn = canShip
       ? `<button class="btn btn-outline btn-sm" onclick="openShipForm(${s.id},'${s.channel}','${(s.order_no||'').replace(/'/g,"\\'")}')">🚚 배송처리</button>`
@@ -2206,7 +2205,6 @@ async function loadSales() {
     <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.memo && s.memo.includes('|') ? s.memo.split('|')[1].trim() : (s.memo || '')}</td>
     <td>${shipBtn}</td>
   </tr>`;
-  }).join('');
 }
 
 async function loadPartners() {
@@ -2656,6 +2654,8 @@ async function saveShipping() {
     state.loaded.sales    = false;
     state.loaded.overview = false;
     await loadSales();
+    // 대시보드 최근 주문에서 배송처리한 경우 그 화면도 새로 고침
+    if (document.getElementById('panel-overview').classList.contains('active')) await loadOverview();
     toast(sentToChannel
       ? `배송처리 완료 ✓ [${tracking}] ${channel} 전송됨`
       : `배송처리 완료 ✓ [${tracking}] (ERP에만 저장, 채널 전송 없음)`, 3500);
