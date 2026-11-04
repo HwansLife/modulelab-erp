@@ -1879,6 +1879,11 @@ async function syncAll() {
   toast('데이터를 새로고침했습니다');
 }
 
+// 취소·환불 주문은 매출 합계와 차트에서 뺌
+function isVoidSale(s) {
+  return s.status === 'cancelled' || s.status === 'refunded';
+}
+
 async function loadOverview() {
   document.getElementById('overview-date').textContent =
     new Date().toLocaleDateString('ko-KR', {year:'numeric',month:'long',day:'numeric', weekday:'long'});
@@ -1886,7 +1891,7 @@ async function loadOverview() {
   const [pR, ptR, sR, dR] = await Promise.all([
     sb.from('products').select('id,name,stock'),
     sb.from('partners').select('id'),
-    sb.from('sales_orders').select('amount,order_date,channel,qty'),
+    sb.from('sales_orders').select('amount,order_date,channel,qty,status'),
     sb.from('dev_projects').select('id,status'),
   ]);
   if (pR.error) throw new Error(pR.error.message);
@@ -1902,7 +1907,7 @@ async function loadOverview() {
   // KPIs
   const now = new Date();
   const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
-  const monthSales = sales.filter(s => s.order_date >= monthStart && s.status !== 'cancelled' && s.status !== 'refunded');
+  const monthSales = sales.filter(s => s.order_date >= monthStart && !isVoidSale(s));
   const monthRev = monthSales.reduce((a,s) => a + (s.amount||0), 0);
   const inProgressDevs = devs.filter(d => !['done','idea'].includes(d.status)).length;
 
@@ -1915,7 +1920,7 @@ async function loadOverview() {
 
   // Recent sales table
   const rsR = await sb.from('sales_orders')
-    .select('channel,amount,qty,order_date,memo,product_name,products(name)')
+    .select('channel,amount,qty,order_date,memo,product_name,status,products(name)')
     .order('order_date', {ascending:false}).limit(6);
   const recentSales = rsR.data || [];
   const tbody = document.getElementById('recent-sales-tbody');
@@ -1928,13 +1933,16 @@ async function loadOverview() {
         <button class="btn btn-primary" onclick="openOverlay('overlay-sale')">+ 매출 입력</button>
       </div></td></tr>`;
   } else {
-    tbody.innerHTML = recentSales.map(s => `<tr>
+    tbody.innerHTML = recentSales.map(s => {
+      const voided = isVoidSale(s);
+      return `<tr${voided ? ' style="opacity:.55"' : ''}>
       <td><span class="badge" style="background:${getChannelColor(s.channel)}22;color:${getChannelColor(s.channel)};border:1px solid ${getChannelColor(s.channel)}44">${s.channel}</span></td>
-      <td>${s.product_name || s.products?.name || (s.memo && s.memo.includes('|') ? s.memo.split('|')[0].trim() : (s.memo || '—'))}</td>
+      <td>${s.product_name || s.products?.name || (s.memo && s.memo.includes('|') ? s.memo.split('|')[0].trim() : (s.memo || '—'))}${voided ? ' ' + statusBadge(s.status) : ''}</td>
       <td class="td-center">${s.qty}</td>
-      <td class="td-right td-mono">${fmt(s.amount)}</td>
+      <td class="td-right td-mono"${voided ? ' style="text-decoration:line-through"' : ''}>${fmt(s.amount)}</td>
       <td>${s.order_date}</td>
-    </tr>`).join('');
+    </tr>`;
+    }).join('');
   }
 
   // Charts
@@ -1950,14 +1958,16 @@ function drawSalesChart(sales) {
     months.push({
       label: `${d.getMonth()+1}월`,
       key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
-      total: 0
+      byChannel: {}
     });
   }
-  sales.forEach(s => {
+  // 월별 막대를 채널별 금액만큼 나눠 쌓음 (취소·환불 제외)
+  sales.filter(s => !isVoidSale(s)).forEach(s => {
     const mk = s.order_date ? s.order_date.slice(0,7) : '';
     const m = months.find(m => m.key === mk);
-    if (m) m.total += (s.amount || 0);
+    if (m) m.byChannel[s.channel] = (m.byChannel[s.channel] || 0) + (s.amount || 0);
   });
+  const channels = [...new Set(months.flatMap(m => Object.keys(m.byChannel)))];
 
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark' ||
     (!document.documentElement.getAttribute('data-theme') && matchMedia('(prefers-color-scheme:dark)').matches);
@@ -1968,20 +1978,34 @@ function drawSalesChart(sales) {
     type: 'bar',
     data: {
       labels: months.map(m => m.label),
-      datasets: [{
-        label: '매출',
-        data: months.map(m => m.total),
-        backgroundColor: '#2563eb',
-        borderRadius: 5,
+      datasets: channels.map(ch => ({
+        label: ch,
+        data: months.map(m => m.byChannel[ch] || 0),
+        backgroundColor: getChannelColor(ch),
+        borderRadius: 3,
         borderSkipped: false,
-      }]
+      }))
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: {
+          display: channels.length > 1, position: 'bottom',
+          labels: { color: themeColor('--fg'), boxWidth: 12, padding: 12, font: { size: 11 } }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.raw)}원`,
+            footer: items => '합계 ' + fmt(items.reduce((a, i) => a + i.raw, 0)) + '원'
+          },
+          filter: item => item.raw > 0
+        }
+      },
+      interaction: { mode: 'index', intersect: false },
       scales: {
-        x: { grid: { display: false }, ticks: { color: isDark ? '#8b949e' : '#6b7280' } },
+        x: { stacked: true, grid: { display: false }, ticks: { color: isDark ? '#8b949e' : '#6b7280' } },
         y: {
+          stacked: true,
           grid: { color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
           ticks: {
             color: isDark ? '#8b949e' : '#6b7280',
@@ -1991,6 +2015,11 @@ function drawSalesChart(sales) {
       }
     }
   });
+}
+
+// 지금 테마(라이트/다크)의 CSS 색 변수 값
+function themeColor(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
 }
 
 // 채널별 고정 색상
@@ -2010,7 +2039,7 @@ function getChannelColor(ch) {
 function drawChannelChart(sales) {
   const channels = {};
   // 취소/환불 제외
-  sales.filter(s => s.status !== 'cancelled' && s.status !== 'refunded').forEach(s => {
+  sales.filter(s => !isVoidSale(s)).forEach(s => {
     channels[s.channel] = (channels[s.channel] || 0) + (s.amount || 0);
   });
   const labels = Object.keys(channels);
@@ -2053,6 +2082,7 @@ function drawChannelChart(sales) {
               const ds = chart.data.datasets[0];
               return chart.data.labels.map((label, i) => ({
                 text: `${label}  ${fmtShort(ds.data[i])}`,
+                fontColor: themeColor('--fg'),   // 직접 만든 범례는 글자색을 따로 지정해야 함 (안 하면 검정)
                 fillStyle: ds.backgroundColor[i],
                 strokeStyle: ds.backgroundColor[i],
                 hidden: false,
