@@ -575,6 +575,29 @@ tr:hover td { background: var(--surface2); }
 .connect-banner-text { font-size: 13px; flex: 1; min-width: 200px; }
 .connect-banner-text strong { color: var(--accent); }
 
+/* 제품 / 상품 구분 탭 */
+.ptype-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.ptype-tab {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--fg-sub);
+  font-family: inherit; font-size: 13px; cursor: pointer;
+}
+.ptype-tab:hover { color: var(--fg); }
+.ptype-tab.active { background: var(--accent-lt); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.ptype-tab .cnt { font-size: 11px; opacity: .75; }
+.ptype-group-row td {
+  background: var(--surface2); font-size: 12px; font-weight: 700; color: var(--fg);
+  padding-top: 10px; padding-bottom: 10px;
+}
+.ptype-group-row .sub { font-weight: 400; color: var(--fg-faint); margin-left: 6px; }
+.ptype-group-head {
+  grid-column: 1 / -1; font-size: 13px; font-weight: 700; color: var(--fg);
+  padding: 6px 2px 0; border-bottom: 1px solid var(--border); padding-bottom: 8px;
+}
+.ptype-group-head:not(:first-child) { margin-top: 12px; }
+.ptype-group-head .sub { font-weight: 400; font-size: 12px; color: var(--fg-faint); margin-left: 6px; }
+
 /* Product master grid */
 .products-grid {
   display: grid;
@@ -754,6 +777,10 @@ tr:hover td { background: var(--surface2); }
       <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
       매입 자료 등록
     </button>
+    <button class="nav-item" onclick="showPanel('bulk')">
+      <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 2l10 5-10 5L2 7z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg>
+      채널 일괄등록
+    </button>
     <button class="nav-item" onclick="showPanel('inventory')">
       <svg class="nav-icon" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>
       재고 관리
@@ -762,10 +789,6 @@ tr:hover td { background: var(--surface2); }
     <button class="nav-item" onclick="showPanel('products')">
       <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
       제품 관리
-    </button>
-    <button class="nav-item" onclick="showPanel('bulk')">
-      <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 2l10 5-10 5L2 7z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg>
-      채널 일괄등록
     </button>
 
     <div class="nav-section-label">거래</div>
@@ -874,9 +897,10 @@ tr:hover td { background: var(--surface2); }
         </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-outline" onclick="openOverlay('overlay-batch-import')">📦 매입상품 일괄 등록</button>
-          <button class="btn btn-primary" onclick="openOverlay('overlay-product')">+ 제품 등록</button>
+          <button class="btn btn-primary" onclick="openProductForm(null)">+ 등록</button>
         </div>
       </div>
+      <div class="ptype-tabs" id="ptype-tabs-inventory"></div>
       <div class="card">
         <div class="card-body-p0 tbl-wrap">
           <table>
@@ -1069,8 +1093,9 @@ tr:hover td { background: var(--surface2); }
           <div class="page-title">제품 관리</div>
           <div class="page-sub">등록된 제품 마스터 데이터</div>
         </div>
-        <button class="btn btn-primary" onclick="openProductForm(null)">+ 제품 등록</button>
+        <button class="btn btn-primary" onclick="openProductForm(null)">+ 등록</button>
       </div>
+      <div class="ptype-tabs" id="ptype-tabs-products"></div>
       <div id="products-grid" class="products-grid"></div>
     </section>
 
@@ -1426,6 +1451,12 @@ tr:hover td { background: var(--surface2); }
       <div class="field-row">
         <div class="field"><label>SKU *</label><input id="p-sku" placeholder="ML-001"></div>
         <div class="field"><label>브랜드</label><input id="p-brand" placeholder="모듈랩"></div>
+      </div>
+      <div class="field"><label>구분</label>
+        <select id="p-ptype">
+          <option value="own">제품 — 모듈랩이 직접 만든 것</option>
+          <option value="resale">상품 — 공급처에서 매입해 파는 것</option>
+        </select>
       </div>
       <div class="field-row">
         <div class="field"><label>카테고리</label>
@@ -2150,18 +2181,64 @@ async function loadInventory() {
   setStatus(true);
   state.products = items;
 
+  renderInventory();
+
+  // low stock badge
+  const low = items.filter(p => p.stock !== null && p.stock < 3).length;
+  const badge = document.getElementById('nav-stock-badge');
+  if (low > 0) { badge.textContent = low; badge.hidden = false; }
+  else badge.hidden = true;
+}
+
+// ── 제품(모듈랩 자체 제작) / 상품(매입 판매) 구분 ─────────────────────
+const PTYPES = [
+  { key: 'own',    label: '제품', sub: '모듈랩 자체 제작' },
+  { key: 'resale', label: '상품', sub: '매입 판매' },
+];
+const PTYPE_TAB = { inventory: 'all', products: 'all' };   // 화면별로 지금 고른 탭
+
+function ptypeOf(p) { return p.product_type === 'resale' ? 'resale' : 'own'; }
+
+function renderPtypeTabs(screen, items, rerender) {
+  const cur = PTYPE_TAB[screen];
+  const count = k => items.filter(p => ptypeOf(p) === k).length;
+  const tabs = [{ key: 'all', label: '전체', n: items.length }, ...PTYPES.map(t => ({ ...t, n: count(t.key) }))];
+  const box = document.getElementById('ptype-tabs-' + screen);
+  box.innerHTML = tabs.map(t =>
+    `<button class="ptype-tab${t.key === cur ? ' active' : ''}" data-k="${t.key}">${t.label} <span class="cnt">${t.n}</span></button>`
+  ).join('');
+  box.querySelectorAll('.ptype-tab').forEach(b => b.onclick = () => { PTYPE_TAB[screen] = b.dataset.k; rerender(); });
+}
+
+// 고른 탭에 맞는 묶음들: 전체면 제품 → 상품 순으로 두 묶음
+function ptypeGroups(screen, items) {
+  const cur = PTYPE_TAB[screen];
+  return PTYPES.filter(t => cur === 'all' || cur === t.key)
+    .map(t => ({ ...t, items: items.filter(p => ptypeOf(p) === t.key) }))
+    .filter(g => g.items.length || cur !== 'all');
+}
+
+function renderInventory() {
+  const items = state.products || [];
+  renderPtypeTabs('inventory', items, renderInventory);
   const tbody = document.getElementById('inventory-tbody');
-  if (items.length === 0) {
+  const groups = ptypeGroups('inventory', items);
+  const showHead = PTYPE_TAB.inventory === 'all';
+  if (!groups.some(g => g.items.length)) {
     tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
       <div class="empty-icon">📦</div>
-      <div class="empty-title">등록된 제품 없음</div>
-      <div class="empty-desc">첫 제품을 등록해보세요</div>
-      <button class="btn btn-primary" onclick="openOverlay('overlay-product')">+ 제품 등록</button>
+      <div class="empty-title">등록된 품목 없음</div>
+      <button class="btn btn-primary" onclick="openProductForm(null)">+ 등록</button>
     </div></td></tr>`;
     return;
   }
+  tbody.innerHTML = groups.map(g =>
+    (showHead ? `<tr class="ptype-group-row"><td colspan="8">${g.label}<span class="sub">${g.sub} · ${g.items.length}개</span></td></tr>` : '') +
+    g.items.map(invRowHtml).join('')
+  ).join('');
+}
 
-  tbody.innerHTML = items.map(p => {
+function invRowHtml(p) {
     const stockBadge = p.stock === 0
       ? `<span class="badge badge-red">${p.stock}</span>`
       : p.stock < 5
@@ -2181,13 +2258,6 @@ async function loadInventory() {
         <button class="btn btn-primary btn-sm" onclick="openChannelRegister(${p.id})">📤 등록</button>
       </td>
     </tr>`;
-  }).join('');
-
-  // low stock badge
-  const low = items.filter(p => p.stock !== null && p.stock < 3).length;
-  const badge = document.getElementById('nav-stock-badge');
-  if (low > 0) { badge.textContent = low; badge.hidden = false; }
-  else badge.hidden = true;
 }
 
 async function loadOrders() {
@@ -2878,17 +2948,30 @@ async function loadProductsMaster() {
   setStatus(true);
   state.products = items;
 
+  renderProductsGrid();
+}
+
+function renderProductsGrid() {
+  const items = state.products || [];
+  renderPtypeTabs('products', items, renderProductsGrid);
   const grid = document.getElementById('products-grid');
-  if (!items || items.length === 0) {
+  const groups = ptypeGroups('products', items);
+  if (!groups.some(g => g.items.length)) {
     grid.innerHTML = `<div style="grid-column:1/-1"><div class="empty-state">
       <div class="empty-icon">🏷️</div>
-      <div class="empty-title">등록된 제품 없음</div>
-      <button class="btn btn-primary" onclick="openProductForm(null)">+ 제품 등록</button>
+      <div class="empty-title">등록된 품목 없음</div>
+      <button class="btn btn-primary" onclick="openProductForm(null)">+ 등록</button>
     </div></div>`;
     return;
   }
+  const showHead = PTYPE_TAB.products === 'all';
+  grid.innerHTML = groups.map(g =>
+    (showHead ? `<div class="ptype-group-head">${g.label}<span class="sub">${g.sub} · ${g.items.length}개</span></div>` : '') +
+    g.items.map(productCardHtml).join('')
+  ).join('');
+}
 
-  grid.innerHTML = items.map(p => {
+function productCardHtml(p) {
     const imgHtml = p.image_url
       ? `<img src="${p.image_url}" alt="${p.name}" onerror="this.parentElement.innerHTML='📷'">`
       : '📷';
@@ -2915,18 +2998,25 @@ async function loadProductsMaster() {
         ${priceUsd ? `<span style="color:var(--fg-sub);font-size:12px">${priceUsd}</span>` : ''}
       </div>
     </div>`;
-  }).join('');
 }
 
 function openProductForm(id) {
   const p = id ? state.products.find(x => x.id === id) : null;
-  document.getElementById('product-form-title').textContent = p ? '제품 수정' : '제품 등록';
+  document.getElementById('product-form-title').textContent = p ? '수정' : '등록';
   document.getElementById('p-id').value = p ? p.id : '';
   document.getElementById('p-name').value = p ? (p.name || '') : '';
   document.getElementById('p-name-en').value = p ? (p.name_en || '') : '';
   document.getElementById('p-sku').value = p ? (p.sku || '') : '';
-  document.getElementById('p-brand').value = p ? (p.brand || '모듈랩') : '모듈랩';
-  document.getElementById('p-cat').value = p ? (p.category || '기타부품') : '기타부품';
+  // 새로 등록할 땐 지금 보고 있는 탭(제품/상품)을 기본값으로
+  const screen = document.getElementById('panel-inventory').classList.contains('active') ? 'inventory' : 'products';
+  const newType = PTYPE_TAB[screen] !== 'all' ? PTYPE_TAB[screen] : 'own';
+  document.getElementById('p-ptype').value = p ? (p.product_type || 'own') : newType;
+  document.getElementById('p-brand').value = p ? (p.brand || '') : (newType === 'own' ? '모듈랩' : '');
+  // 상품 카테고리(트라이얼·버기 등)는 목록에 없으니 그 값을 선택지에 더해 줌 (안 하면 저장 시 지워짐)
+  const catSel = document.getElementById('p-cat');
+  const cat = p ? (p.category || '기타부품') : '기타부품';
+  if (![...catSel.options].some(o => o.value === cat)) catSel.add(new Option(cat, cat));
+  catSel.value = cat;
   document.getElementById('p-stock').value = p ? (p.stock ?? 0) : 0;
   document.getElementById('p-cost').value = p ? (p.cost_price || '') : '';
   document.getElementById('p-sell').value = p ? (p.sell_price || '') : '';
@@ -3000,7 +3090,8 @@ async function saveProductMaster() {
     name: name,
     name_en: document.getElementById('p-name-en').value.trim() || null,
     sku: sku,
-    brand: document.getElementById('p-brand').value.trim() || '모듈랩',
+    brand: document.getElementById('p-brand').value.trim() || (document.getElementById('p-ptype').value === 'own' ? '모듈랩' : null),
+    product_type: document.getElementById('p-ptype').value,
     category: document.getElementById('p-cat').value,
     stock: parseInt(document.getElementById('p-stock').value) || 0,
     cost_price: parseInt(document.getElementById('p-cost').value) || 0,
@@ -3030,7 +3121,9 @@ async function saveProductMaster() {
 
   closeOverlay('overlay-product');
   state.loaded.products = false;
-  await loadProductsMaster();
+  state.loaded.inventory = false;
+  if (document.getElementById('panel-inventory').classList.contains('active')) await loadInventory();
+  else await loadProductsMaster();
   toast(id ? '제품이 수정되었습니다 ✓' : '제품이 등록되었습니다 ✓');
 }
 
