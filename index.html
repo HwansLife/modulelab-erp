@@ -2079,7 +2079,8 @@ function statusBadge(s) {
   const map = {
     pending: ['badge-yellow','발주대기'], received: ['badge-green','입고완료'],
     cancelled: ['badge-red','취소'], paid: ['badge-green','결제완료'],
-    shipping: ['badge-blue','배송중'], done: ['badge-gray','완료'],
+    shipping: ['badge-blue','배송중'], delivered: ['badge-gray','배송완료'],
+    refunded: ['badge-red','환불'], done: ['badge-gray','완료'],
     supplier: ['badge-blue','공급업체'], customer: ['badge-green','고객사'],
     partner: ['badge-gray','협력업체'],
     idea: ['badge-gray','아이디어'], design: ['badge-blue','설계중'],
@@ -2139,7 +2140,8 @@ async function loadOverview() {
     sb.from('partners').select('*').order('name', {ascending:true}),
     sb.from('sales_orders').select('amount,order_date,channel,qty,status'),
     sb.from('dev_projects').select('id,status'),
-    sb.from('sales_orders').select('*,products(name)').order('order_date', {ascending:false}).limit(8),
+    // 같은 날짜끼리는 늦게 들어온 주문(id 큰 것)이 위로 — 매출 현황과 같은 순서
+    sb.from('sales_orders').select('*,products(name)').order('order_date', {ascending:false}).order('id', {ascending:false}).limit(8),
   ]);
   if (pR.error) throw new Error(pR.error.message);
   setStatus(true);
@@ -2738,7 +2740,7 @@ async function loadOrders() {
 
 async function loadSales() {
   const { data: items, error } = await sb.from('sales_orders')
-    .select('*,products(name)').order('order_date', {ascending:false}).limit(100);
+    .select('*,products(name)').order('order_date', {ascending:false}).order('id', {ascending:false}).limit(100);
   if (error) throw new Error(error.message);
   setStatus(true);
 
