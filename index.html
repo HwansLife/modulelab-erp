@@ -857,7 +857,12 @@ tr.asset-gone td { color: var(--fg-faint); }
         <div class="kpi-card">
           <div class="kpi-label">이달 매출</div>
           <div class="kpi-value success" id="kpi-revenue">—</div>
-          <div class="kpi-delta">이번 달 누적</div>
+          <div class="kpi-delta" id="kpi-revenue-sub">이번 달 누적 (결제 금액)</div>
+        </div>
+        <div class="kpi-card" title="매출(부가세 뺀 공급가) − 판매한 상품의 매입 원가(부가세 뺀 금액). 비용·수수료는 아직 빼지 않음">
+          <div class="kpi-label">이달 이익</div>
+          <div class="kpi-value accent" id="kpi-profit-month">—</div>
+          <div class="kpi-delta" id="kpi-profit-month-sub">매출 − 원가</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">제품 종류</div>
@@ -2130,6 +2135,20 @@ function isVoidSale(s) {
   return s.status === 'cancelled' || s.status === 'refunded';
 }
 
+// 매출총이익 = 매출(공급가) − 매출원가(공급가)
+//  국내 판매가·매입가는 부가세 포함이라 ÷1.1, eBay는 수출(영세율)이라 매출에 부가세 없음
+//  원가(cost_amount)는 DB가 주문 품목과 상품 매입가로 계산해 둔 값
+function profitOf(sales) {
+  let net = 0, cost = 0, missing = 0;
+  for (const s of sales) {
+    if (isVoidSale(s)) continue;
+    net  += s.channel === 'ebay' ? (s.amount || 0) : (s.amount || 0) / 1.1;
+    cost += (s.cost_amount || 0) / 1.1;
+    if (s.cost_missing !== false) missing++;
+  }
+  return { net: Math.round(net), cost: Math.round(cost), profit: Math.round(net - cost), missing };
+}
+
 async function loadOverview() {
   document.getElementById('overview-date').textContent =
     new Date().toLocaleDateString('ko-KR', {year:'numeric',month:'long',day:'numeric', weekday:'long'});
@@ -2138,7 +2157,7 @@ async function loadOverview() {
   const [pR, ptR, sR, dR, rsR] = await Promise.all([
     sb.from('products').select('*').order('name', {ascending:true}),
     sb.from('partners').select('*').order('name', {ascending:true}),
-    sb.from('sales_orders').select('amount,order_date,channel,qty,status'),
+    sb.from('sales_orders').select('amount,order_date,channel,qty,status,cost_amount,cost_missing'),
     sb.from('dev_projects').select('id,status'),
     // 같은 날짜끼리는 늦게 들어온 주문(id 큰 것)이 위로 — 매출 현황과 같은 순서
     sb.from('sales_orders').select('*,products(name)').order('order_date', {ascending:false}).order('id', {ascending:false}).limit(8),
@@ -2159,6 +2178,11 @@ async function loadOverview() {
 
   const pendingShipping = sales.filter(s => ['paid','pending'].includes(s.status)).length;
   document.getElementById('kpi-revenue').textContent = fmtShort(monthRev);
+  const pf = profitOf(monthSales);
+  document.getElementById('kpi-profit-month').textContent = fmtShort(pf.profit);
+  document.getElementById('kpi-profit-month-sub').textContent = pf.missing
+    ? `⚠ 원가 미입력 ${pf.missing}건 (이익이 실제보다 크게 보임)`
+    : (pf.net ? `이익률 ${Math.round(pf.profit / pf.net * 100)}% · 매출 − 원가` : '매출 − 원가');
   document.getElementById('kpi-products').textContent = products.length;
   document.getElementById('kpi-partners').textContent = partners.length;
   document.getElementById('kpi-dev').textContent = inProgressDevs;
