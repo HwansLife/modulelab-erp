@@ -587,7 +587,9 @@ tr.sale-void td .badge, tr.sale-void td .btn { text-decoration: none; opacity: .
 .intake-opt-hint { font-size: 11px; color: var(--fg-faint); }
 
 /* 비용 정산 — 손익 계산 내역 */
-.pl-month { margin-left: auto; background: var(--surface2); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 12px; }
+.pl-ship { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--fg-sub); }
+.pl-ship input { width: 76px; text-align: right; background: var(--surface2); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font-family: inherit; font-size: 12px; }
+.pl-month { margin-left: 10px; background: var(--surface2); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 12px; }
 .pl-wrap { display: grid; grid-template-columns: minmax(280px, 460px) 1fr; gap: 20px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
 @media (max-width: 760px) { .pl-wrap { grid-template-columns: 1fr; } }
 .pl-row { display: grid; grid-template-columns: 18px 1fr auto; gap: 8px; align-items: baseline; padding: 5px 0; font-size: 13px; color: var(--fg-sub); }
@@ -1131,7 +1133,7 @@ tr.asset-gone td { color: var(--fg-faint); }
         <div class="kpi-card">
           <div class="kpi-label">이달 비용</div>
           <div class="kpi-value warn" id="kpi-exp-month">—</div>
-          <div class="kpi-delta">이번 달 지출</div>
+          <div class="kpi-delta" id="kpi-exp-month-sub">이번 달 지출</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">이달 매출</div>
@@ -1143,10 +1145,10 @@ tr.asset-gone td { color: var(--fg-faint); }
           <div class="kpi-value warn" id="kpi-exp-cogs">—</div>
           <div class="kpi-delta" id="kpi-exp-cogs-sub">판매한 상품의 매입 원가</div>
         </div>
-        <div class="kpi-card" title="매출(공급가) − 매출원가(공급가) − 이달 비용">
+        <div class="kpi-card" title="매출(공급가) − 매출원가(공급가) − 택배비 − 이달 비용">
           <div class="kpi-label">순이익 (추정)</div>
           <div class="kpi-value accent" id="kpi-profit">—</div>
-          <div class="kpi-delta">매출 − 원가 − 비용</div>
+          <div class="kpi-delta">매출 − 원가 − 택배비 − 비용</div>
         </div>
       </div>
 
@@ -1154,13 +1156,16 @@ tr.asset-gone td { color: var(--fg-faint); }
       <div class="card" style="margin-bottom:16px">
         <div class="card-head">
           <span class="card-title">손익 계산 내역</span>
+          <label class="pl-ship" title="국내 주문 1건마다 빠지는 택배비 (eBay 제외)">택배비 건당
+            <input type="number" id="pl-ship-rate" min="0" step="100" value="3000" onchange="saveShippingRate(this.value)">원</label>
           <input type="month" id="pl-month" class="pl-month" onchange="state.loaded.expenses=false;loadExpenses()">
         </div>
         <div class="pl-wrap">
           <div class="pl-ladder" id="pl-ladder"></div>
           <div class="pl-note">
             국내 판매 금액과 매입가는 부가세 포함이라 <b>÷1.1</b> 해서 공급가로 계산해요 (부가세는 나라에 낼 돈이라 이익이 아님).<br>
-            eBay는 수출(영세율)이라 부가세가 없어 그대로 써요. 취소·환불 주문은 빼요. 비용은 입력한 금액 그대로 빼요.
+            eBay는 수출(영세율)이라 부가세가 없어 그대로 써요. 취소·환불 주문은 빼요.<br>
+            택배비는 국내 주문 1건마다 위에 적은 금액을 빼요 (eBay 해외 배송은 제외). 비용은 입력한 금액 그대로 빼요.
           </div>
         </div>
         <div class="card-body-p0 tbl-wrap">
@@ -1168,9 +1173,9 @@ tr.asset-gone td { color: var(--fg-faint); }
             <thead>
               <tr><th>날짜</th><th>채널</th><th>상품</th>
                   <th class="td-right">결제 금액</th><th class="td-right">매출 (공급가)</th>
-                  <th class="td-right">원가 (공급가)</th><th class="td-right">이익</th><th class="td-right">이익률</th></tr>
+                  <th class="td-right">원가 (공급가)</th><th class="td-right">택배비</th><th class="td-right">이익</th><th class="td-right">이익률</th></tr>
             </thead>
-            <tbody id="pl-tbody"><tr><td colspan="8"><div class="spinner"></div></td></tr></tbody>
+            <tbody id="pl-tbody"><tr><td colspan="9"><div class="spinner"></div></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -3095,13 +3100,18 @@ async function loadExpenses() {
   const monthSales = monthAll.filter(s => !isVoidSale(s));
   const monthRev = monthSales.reduce((a,s) => a + (s.amount||0), 0);
   const pf = profitOf(monthSales);   // 대시보드 '이달 이익'과 같은 계산 (공급가 기준)
-  renderProfitBreakdown(monthAll, monthSales, monthRev, pf, monthExp, monthExpItems.length);
-  document.getElementById('kpi-exp-month').textContent = fmtShort(monthExp);
+  // 택배비: 국내 주문(eBay 제외) 1건당 정해 둔 금액 — 비용 정산 화면에서 바꿀 수 있음
+  const shipRate = await shippingRate();
+  const shipCount = monthSales.filter(shipsDomestic).length;
+  const monthShip = shipCount * shipRate;
+  renderProfitBreakdown(monthAll, monthSales, monthRev, pf, monthExp, monthExpItems.length, { rate: shipRate, count: shipCount, total: monthShip });
+  document.getElementById('kpi-exp-month').textContent = fmtShort(monthExp + monthShip);
+  document.getElementById('kpi-exp-month-sub').textContent = `입력한 비용 ${fmtShort(monthExp)} + 택배비 ${shipCount}건`;
   document.getElementById('kpi-exp-rev').textContent = fmtShort(monthRev);
   document.getElementById('kpi-exp-cogs').textContent = fmtShort(pf.cost);
   document.getElementById('kpi-exp-cogs-sub').textContent = pf.missing
     ? `⚠ 원가 미입력 ${pf.missing}건` : '판매한 상품의 매입 원가 (공급가)';
-  document.getElementById('kpi-profit').textContent = fmtShort(pf.profit - monthExp);
+  document.getElementById('kpi-profit').textContent = fmtShort(pf.profit - monthShip - monthExp);
 
   const tbody = document.getElementById('expenses-tbody');
   if (items.length === 0) {
@@ -3121,8 +3131,29 @@ async function loadExpenses() {
   </tr>`).join('');
 }
 
+// ── 택배비 (주문 1건당) — app_settings 'profit' 에 저장, 기본 3,000원 ──
+const SHIP_DEFAULT = 3000;
+let shipRateCache = null;
+async function shippingRate() {
+  if (shipRateCache != null) return shipRateCache;
+  const { data } = await sb.from('app_settings').select('value').eq('key', 'profit').maybeSingle();
+  shipRateCache = Number(data && data.value && data.value.shipping_per_order) || SHIP_DEFAULT;
+  document.getElementById('pl-ship-rate').value = shipRateCache;
+  return shipRateCache;
+}
+async function saveShippingRate(v) {
+  const n = Math.max(0, Math.round(Number(v) || 0));
+  const { error } = await sb.from('app_settings').upsert({ key: 'profit', value: { shipping_per_order: n }, updated_at: new Date().toISOString() });
+  if (error) { toast('택배비 저장 실패: ' + error.message); return; }
+  shipRateCache = n;
+  toast(`택배비를 건당 ${n.toLocaleString()}원으로 저장했어요`);
+  await loadExpenses();
+}
+// 우리가 국내 택배로 보내는 주문인지 (eBay는 해외 배송이라 따로)
+function shipsDomestic(s) { return s.channel !== 'ebay' && !isVoidSale(s); }
+
 // 손익 계산 내역: 단계별 계산식 + 주문별 이익
-function renderProfitBreakdown(monthAll, monthSales, monthRev, pf, monthExp, expCount) {
+function renderProfitBreakdown(monthAll, monthSales, monthRev, pf, monthExp, expCount, ship) {
   const won = n => Math.round(n).toLocaleString('ko-KR');
   const ebayRev = monthSales.filter(s => s.channel === 'ebay').reduce((a, s) => a + (s.amount || 0), 0);
   const vat = monthRev - pf.net;                       // 국내 판매분의 부가세
@@ -3136,14 +3167,17 @@ function renderProfitBreakdown(monthAll, monthSales, monthRev, pf, monthExp, exp
     row('=', '매출 (공급가)', '', won(pf.net), 'pl-sum') +
     row('−', '매출원가', `판매한 상품 매입가 합계 ${won(costGross)} ÷ 1.1${pf.missing ? ` · <b class="pl-warn">원가 미입력 ${pf.missing}건</b>` : ''}`, won(pf.cost)) +
     row('=', '매출총이익', pf.net ? `이익률 ${Math.round(pf.profit / pf.net * 100)}%` : '', won(pf.profit), 'pl-sum') +
-    row('−', '비용', `이 달 비용 ${expCount}건`, won(monthExp)) +
-    row('=', '순이익 (추정)', '', won(pf.profit - monthExp), 'pl-total');
+    row('−', '택배비', `국내 주문 ${ship.count}건 × ${won(ship.rate)}원 (eBay 제외)`, won(ship.total)) +
+    row('−', '비용', `비용 내역에 입력한 ${expCount}건`, won(monthExp)) +
+    row('=', '순이익 (추정)', '', won(pf.profit - ship.total - monthExp), 'pl-total');
 
   const tbody = document.getElementById('pl-tbody');
-  if (!monthAll.length) { tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--fg-faint);padding:18px">이 달 주문이 없어요</td></tr>`; return; }
+  if (!monthAll.length) { tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--fg-faint);padding:18px">이 달 주문이 없어요</td></tr>`; return; }
   tbody.innerHTML = monthAll.map(s => {
     const voidS = isVoidSale(s);
     const p = saleProfit(s);
+    const shipCost = shipsDomestic(s) ? ship.rate : 0;
+    p.profit -= shipCost;   // 주문별 이익 = 매출 − 원가 − 택배비
     const name = s.product_name || s.products?.name || '—';
     const costCell = voidS ? '—'
       : p.missing ? `<span class="badge badge-yellow" title="상품 연결이 안 됐거나 원가가 0원">원가 미입력</span>`
@@ -3155,6 +3189,7 @@ function renderProfitBreakdown(monthAll, monthSales, monthRev, pf, monthExp, exp
       <td class="td-right td-mono">${won(s.amount || 0)}</td>
       <td class="td-right td-mono">${voidS ? '—' : won(p.net)}</td>
       <td class="td-right td-mono">${costCell}</td>
+      <td class="td-right td-mono">${voidS || !shipCost ? '—' : won(shipCost)}</td>
       <td class="td-right td-mono"${!voidS && p.profit < 0 ? ' style="color:var(--danger)"' : ''}>${voidS ? '—' : won(p.profit)}</td>
       <td class="td-right">${voidS || !p.net || p.missing ? '—' : Math.round(p.profit / p.net * 100) + '%'}</td>
     </tr>`;
