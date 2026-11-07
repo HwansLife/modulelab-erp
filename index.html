@@ -579,6 +579,21 @@ tr:hover td { background: var(--surface2); }
 tr.sale-void td { color: var(--fg-faint); text-decoration: line-through; }
 tr.sale-void td .badge, tr.sale-void td .btn { text-decoration: none; opacity: .7; }
 
+/* 비용 정산 — 손익 계산 내역 */
+.pl-month { margin-left: auto; background: var(--surface2); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 12px; }
+.pl-wrap { display: grid; grid-template-columns: minmax(280px, 460px) 1fr; gap: 20px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+@media (max-width: 760px) { .pl-wrap { grid-template-columns: 1fr; } }
+.pl-row { display: grid; grid-template-columns: 18px 1fr auto; gap: 8px; align-items: baseline; padding: 5px 0; font-size: 13px; color: var(--fg-sub); }
+.pl-row small { display: block; font-size: 11px; color: var(--fg-faint); }
+.pl-sign { color: var(--fg-faint); font-weight: 700; text-align: center; }
+.pl-val { font-family: 'JetBrains Mono', monospace; color: var(--fg); }
+.pl-row.pl-sum { border-top: 1px dashed var(--border); color: var(--fg); font-weight: 600; }
+.pl-row.pl-total { border-top: 2px solid var(--border); color: var(--fg); font-weight: 700; font-size: 14px; }
+.pl-row.pl-total .pl-val { color: var(--accent); }
+.pl-warn { color: var(--warn); font-weight: 600; }
+.pl-note { font-size: 12px; color: var(--fg-faint); line-height: 1.7; align-self: center; }
+.pl-table td.pl-name { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* hidden 속성은 .field 같은 display 지정보다 항상 우선 */
 [hidden] { display: none !important; }
 
@@ -1110,7 +1125,34 @@ tr.asset-gone td { color: var(--fg-faint); }
           <div class="kpi-delta">매출 − 원가 − 비용</div>
         </div>
       </div>
+
+      <!-- 손익 계산 과정: 위 숫자가 어떻게 나왔는지 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head">
+          <span class="card-title">손익 계산 내역</span>
+          <input type="month" id="pl-month" class="pl-month" onchange="state.loaded.expenses=false;loadExpenses()">
+        </div>
+        <div class="pl-wrap">
+          <div class="pl-ladder" id="pl-ladder"></div>
+          <div class="pl-note">
+            국내 판매 금액과 매입가는 부가세 포함이라 <b>÷1.1</b> 해서 공급가로 계산해요 (부가세는 나라에 낼 돈이라 이익이 아님).<br>
+            eBay는 수출(영세율)이라 부가세가 없어 그대로 써요. 취소·환불 주문은 빼요. 비용은 입력한 금액 그대로 빼요.
+          </div>
+        </div>
+        <div class="card-body-p0 tbl-wrap">
+          <table class="pl-table">
+            <thead>
+              <tr><th>날짜</th><th>채널</th><th>상품</th>
+                  <th class="td-right">결제 금액</th><th class="td-right">매출 (공급가)</th>
+                  <th class="td-right">원가 (공급가)</th><th class="td-right">이익</th><th class="td-right">이익률</th></tr>
+            </thead>
+            <tbody id="pl-tbody"><tr><td colspan="8"><div class="spinner"></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="card">
+        <div class="card-head"><span class="card-title">비용 내역</span></div>
         <div class="card-body-p0 tbl-wrap">
           <table>
             <thead>
@@ -2143,13 +2185,18 @@ function isVoidSale(s) {
 // 매출총이익 = 매출(공급가) − 매출원가(공급가)
 //  국내 판매가·매입가는 부가세 포함이라 ÷1.1, eBay는 수출(영세율)이라 매출에 부가세 없음
 //  원가(cost_amount)는 DB가 주문 품목과 상품 매입가로 계산해 둔 값
+function saleProfit(s) {
+  const net  = s.channel === 'ebay' ? (s.amount || 0) : (s.amount || 0) / 1.1;
+  const cost = (s.cost_amount || 0) / 1.1;
+  return { net, cost, profit: net - cost, missing: s.cost_missing !== false };
+}
 function profitOf(sales) {
   let net = 0, cost = 0, missing = 0;
   for (const s of sales) {
     if (isVoidSale(s)) continue;
-    net  += s.channel === 'ebay' ? (s.amount || 0) : (s.amount || 0) / 1.1;
-    cost += (s.cost_amount || 0) / 1.1;
-    if (s.cost_missing !== false) missing++;
+    const p = saleProfit(s);
+    net += p.net; cost += p.cost;
+    if (p.missing) missing++;
   }
   return { net: Math.round(net), cost: Math.round(cost), profit: Math.round(net - cost), missing };
 }
@@ -3003,21 +3050,28 @@ function partnerUrl(site) {
 }
 
 async function loadExpenses() {
-  const now = new Date();
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+  // 볼 달: 손익 계산 내역의 달 선택 (처음엔 이번 달)
+  const monthInput = document.getElementById('pl-month');
+  if (!monthInput.value) monthInput.value = new Date().toISOString().slice(0, 7);
+  const ym = monthInput.value;
+  const inMonth = d => (d || '').slice(0, 7) === ym;
 
   const [eR, sR] = await Promise.all([
     sb.from('expenses').select('*').order('date', {ascending:false}),
-    sb.from('sales_orders').select('amount,order_date,status,channel,cost_amount,cost_missing')
+    sb.from('sales_orders').select('id,amount,order_date,status,channel,cost_amount,cost_missing,product_name,items,products(name)')
+      .order('order_date', {ascending:false}).order('id', {ascending:false})
   ]);
   if (eR.error) throw new Error(eR.error.message);
   setStatus(true);
   const items = eR.data || [], salesAll = sR.data || [];
 
-  const monthExp = items.filter(e => e.date >= monthStart).reduce((a,e) => a + (e.amount||0), 0);
-  const monthSales = salesAll.filter(s => s.order_date >= monthStart && !isVoidSale(s));
+  const monthExpItems = items.filter(e => inMonth(e.date));
+  const monthExp = monthExpItems.reduce((a,e) => a + (e.amount||0), 0);
+  const monthAll = salesAll.filter(s => inMonth(s.order_date));
+  const monthSales = monthAll.filter(s => !isVoidSale(s));
   const monthRev = monthSales.reduce((a,s) => a + (s.amount||0), 0);
   const pf = profitOf(monthSales);   // 대시보드 '이달 이익'과 같은 계산 (공급가 기준)
+  renderProfitBreakdown(monthAll, monthSales, monthRev, pf, monthExp, monthExpItems.length);
   document.getElementById('kpi-exp-month').textContent = fmtShort(monthExp);
   document.getElementById('kpi-exp-rev').textContent = fmtShort(monthRev);
   document.getElementById('kpi-exp-cogs').textContent = fmtShort(pf.cost);
@@ -3041,6 +3095,46 @@ async function loadExpenses() {
     <td class="td-right td-mono">${fmt(e.amount)}</td>
     <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bulkEsc(e.memo || '')}</td>
   </tr>`).join('');
+}
+
+// 손익 계산 내역: 단계별 계산식 + 주문별 이익
+function renderProfitBreakdown(monthAll, monthSales, monthRev, pf, monthExp, expCount) {
+  const won = n => Math.round(n).toLocaleString('ko-KR');
+  const ebayRev = monthSales.filter(s => s.channel === 'ebay').reduce((a, s) => a + (s.amount || 0), 0);
+  const vat = monthRev - pf.net;                       // 국내 판매분의 부가세
+  const costGross = monthSales.reduce((a, s) => a + (s.cost_amount || 0), 0);
+  const voided = monthAll.length - monthSales.length;
+  const row = (sign, label, sub, val, cls = '') =>
+    `<div class="pl-row ${cls}"><span class="pl-sign">${sign}</span><span class="pl-label">${label}${sub ? `<small>${sub}</small>` : ''}</span><span class="pl-val">${val}</span></div>`;
+  document.getElementById('pl-ladder').innerHTML =
+    row('', '결제 금액 합계', `주문 ${monthSales.length}건${voided ? ` · 취소·환불 ${voided}건 제외` : ''}`, won(monthRev)) +
+    row('−', '부가세', `국내 판매분 ÷ 1.1${ebayRev ? ` · eBay ${won(ebayRev)}원은 제외` : ''}`, won(vat)) +
+    row('=', '매출 (공급가)', '', won(pf.net), 'pl-sum') +
+    row('−', '매출원가', `판매한 상품 매입가 합계 ${won(costGross)} ÷ 1.1${pf.missing ? ` · <b class="pl-warn">원가 미입력 ${pf.missing}건</b>` : ''}`, won(pf.cost)) +
+    row('=', '매출총이익', pf.net ? `이익률 ${Math.round(pf.profit / pf.net * 100)}%` : '', won(pf.profit), 'pl-sum') +
+    row('−', '비용', `이 달 비용 ${expCount}건`, won(monthExp)) +
+    row('=', '순이익 (추정)', '', won(pf.profit - monthExp), 'pl-total');
+
+  const tbody = document.getElementById('pl-tbody');
+  if (!monthAll.length) { tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--fg-faint);padding:18px">이 달 주문이 없어요</td></tr>`; return; }
+  tbody.innerHTML = monthAll.map(s => {
+    const voidS = isVoidSale(s);
+    const p = saleProfit(s);
+    const name = s.product_name || s.products?.name || '—';
+    const costCell = voidS ? '—'
+      : p.missing ? `<span class="badge badge-yellow" title="상품 연결이 안 됐거나 원가가 0원">원가 미입력</span>`
+      : won(p.cost);
+    return `<tr class="${voidS ? 'sale-void' : ''}">
+      <td>${s.order_date}</td>
+      <td><span class="badge" style="background:${getChannelColor(s.channel)}22;color:${getChannelColor(s.channel)};border:1px solid ${getChannelColor(s.channel)}44">${bulkEsc(s.channel)}</span></td>
+      <td class="pl-name" title="${bulkEsc(name)}">${bulkEsc(name)}${voidS ? ' ' + statusBadge(s.status) : ''}</td>
+      <td class="td-right td-mono">${won(s.amount || 0)}</td>
+      <td class="td-right td-mono">${voidS ? '—' : won(p.net)}</td>
+      <td class="td-right td-mono">${costCell}</td>
+      <td class="td-right td-mono"${!voidS && p.profit < 0 ? ' style="color:var(--danger)"' : ''}>${voidS ? '—' : won(p.profit)}</td>
+      <td class="td-right">${voidS || !p.net || p.missing ? '—' : Math.round(p.profit / p.net * 100) + '%'}</td>
+    </tr>`;
+  }).join('');
 }
 
 async function loadDev() {
