@@ -1001,7 +1001,7 @@ tr.asset-gone td { color: var(--fg-faint); }
             <div class="field"><label>공급처 (선택)</label><input id="intake-supplier" placeholder="예: 용산알씨, 하비몰"></div>
             <div class="field" style="grid-column:1/-1"><label>메모 (선택)</label><input id="intake-memo" placeholder="자동 등록 담당에게 전할 말 (예: 3번 상품은 등록 제외)"></div>
           </div>
-          <!-- 구분에 따라 채널 기본 체크가 바뀜: 상품 → 아임웹·스마트스토어·토스 / 제품 → eBay -->
+          <!-- 구분에 따라 채널 기본 체크가 바뀜: 상품 → 아임웹·스마트스토어·토스 / 제품 → 전부 -->
           <div class="intake-opts">
             <div class="intake-opt-group">
               <span class="intake-opt-label">구분</span>
@@ -4730,10 +4730,10 @@ function intakeInit() {
   if (!intake.typeSet) { intakeTypeChanged(); intake.typeSet = true; }
 }
 
-// 올릴 곳 기본값: 상품(매입 판매) → 아임웹·스마트스토어·토스 / 제품(자체 제작) → eBay
+// 올릴 곳 기본값: 상품(매입 판매) → 아임웹·스마트스토어·토스 / 제품(자체 제작) → 전부 (eBay 포함)
 const INTAKE_CHANNELS = [['imweb', '아임웹'], ['naver', '스마트스토어'], ['toss', '토스'], ['ebay', 'eBay']];
 const INTAKE_DEFAULTS = { resale: { imweb: true, naver: true, toss: true, ebay: false },
-                          own:    { imweb: false, naver: false, toss: false, ebay: true } };
+                          own:    { imweb: true, naver: true, toss: true, ebay: true } };
 function intakeType() { return document.querySelector('input[name="intake-type"]:checked').value; }
 function intakeTypeChanged() {
   const def = INTAKE_DEFAULTS[intakeType()];
