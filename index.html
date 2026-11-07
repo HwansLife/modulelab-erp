@@ -1097,12 +1097,17 @@ tr.asset-gone td { color: var(--fg-faint); }
         <div class="kpi-card">
           <div class="kpi-label">이달 매출</div>
           <div class="kpi-value success" id="kpi-exp-rev">—</div>
-          <div class="kpi-delta">이번 달 매출</div>
+          <div class="kpi-delta">이번 달 매출 (결제 금액)</div>
         </div>
         <div class="kpi-card">
+          <div class="kpi-label">이달 매출원가</div>
+          <div class="kpi-value warn" id="kpi-exp-cogs">—</div>
+          <div class="kpi-delta" id="kpi-exp-cogs-sub">판매한 상품의 매입 원가</div>
+        </div>
+        <div class="kpi-card" title="매출(공급가) − 매출원가(공급가) − 이달 비용">
           <div class="kpi-label">순이익 (추정)</div>
           <div class="kpi-value accent" id="kpi-profit">—</div>
-          <div class="kpi-delta">매출 - 비용</div>
+          <div class="kpi-delta">매출 − 원가 − 비용</div>
         </div>
       </div>
       <div class="card">
@@ -3003,17 +3008,22 @@ async function loadExpenses() {
 
   const [eR, sR] = await Promise.all([
     sb.from('expenses').select('*').order('date', {ascending:false}),
-    sb.from('sales_orders').select('amount,order_date,status')
+    sb.from('sales_orders').select('amount,order_date,status,channel,cost_amount,cost_missing')
   ]);
   if (eR.error) throw new Error(eR.error.message);
   setStatus(true);
   const items = eR.data || [], salesAll = sR.data || [];
 
   const monthExp = items.filter(e => e.date >= monthStart).reduce((a,e) => a + (e.amount||0), 0);
-  const monthRev = salesAll.filter(s => s.order_date >= monthStart && s.status !== 'cancelled' && s.status !== 'refunded').reduce((a,s) => a + (s.amount||0), 0);
+  const monthSales = salesAll.filter(s => s.order_date >= monthStart && !isVoidSale(s));
+  const monthRev = monthSales.reduce((a,s) => a + (s.amount||0), 0);
+  const pf = profitOf(monthSales);   // 대시보드 '이달 이익'과 같은 계산 (공급가 기준)
   document.getElementById('kpi-exp-month').textContent = fmtShort(monthExp);
   document.getElementById('kpi-exp-rev').textContent = fmtShort(monthRev);
-  document.getElementById('kpi-profit').textContent = fmtShort(monthRev - monthExp);
+  document.getElementById('kpi-exp-cogs').textContent = fmtShort(pf.cost);
+  document.getElementById('kpi-exp-cogs-sub').textContent = pf.missing
+    ? `⚠ 원가 미입력 ${pf.missing}건` : '판매한 상품의 매입 원가 (공급가)';
+  document.getElementById('kpi-profit').textContent = fmtShort(pf.profit - monthExp);
 
   const tbody = document.getElementById('expenses-tbody');
   if (items.length === 0) {
