@@ -678,6 +678,7 @@ tr.asset-gone td { color: var(--fg-faint); }
   background:var(--success-lt); color:var(--success);
 }
 .product-badge.inactive { background:var(--border); color:var(--fg-sub); }
+.product-badge.soldout { background:var(--danger-lt); color:var(--danger); }
 
 /* Dev project kanban */
 .kanban {
@@ -3639,9 +3640,12 @@ function productCardHtml(p) {
     const priceUsd = p.price_usd ? '$' + Number(p.price_usd).toFixed(2) : '';
     const weight = p.weight_g ? p.weight_g + 'g' : '';
     const hs = p.hs_code ? 'HS: ' + p.hs_code : '';
-    const badge = p.active !== false
-      ? `<span class="product-badge">판매중</span>`
-      : `<span class="product-badge inactive">비활성</span>`;
+    // 판매 상태: 비활성 > 품절(재고 0 이하) > 판매중
+    const badge = p.active === false
+      ? `<span class="product-badge inactive">비활성</span>`
+      : (Number(p.stock) || 0) <= 0
+        ? `<span class="product-badge soldout">품절</span>`
+        : `<span class="product-badge">판매중 · 재고 ${p.stock}</span>`;
     return `<div class="product-card${p.active === false ? ' product-inactive' : ''}" onclick="openProductForm(${p.id})">
       <div class="product-card-img">${imgHtml}</div>
       <div class="product-card-body">
