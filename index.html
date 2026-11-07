@@ -579,6 +579,13 @@ tr:hover td { background: var(--surface2); }
 tr.sale-void td { color: var(--fg-faint); text-decoration: line-through; }
 tr.sale-void td .badge, tr.sale-void td .btn { text-decoration: none; opacity: .7; }
 
+/* 매입 자료 등록 — 구분 · 올릴 곳 */
+.intake-opts { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface2); }
+.intake-opt-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 13px; color: var(--fg); }
+.intake-opt-group label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.intake-opt-label { width: 52px; font-size: 12px; font-weight: 600; color: var(--fg-sub); }
+.intake-opt-hint { font-size: 11px; color: var(--fg-faint); }
+
 /* 비용 정산 — 손익 계산 내역 */
 .pl-month { margin-left: auto; background: var(--surface2); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 12px; }
 .pl-wrap { display: grid; grid-template-columns: minmax(280px, 460px) 1fr; gap: 20px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
@@ -973,7 +980,7 @@ tr.asset-gone td { color: var(--fg-faint); }
       <div class="page-head">
         <div>
           <div class="page-title">매입 자료 등록</div>
-          <div class="page-sub">주문서를 올리면 자동으로 상품 정보를 만들어 아임웹(숨김)·네이버(전시중지)에 등록하고, 토스 엑셀을 만들어 둡니다</div>
+          <div class="page-sub">주문서를 올리면 사진·상세 자료를 모아 고른 채널에 등록합니다 (아임웹 숨김 · 네이버 전시중지 · eBay 게시 대기 — 확인 후 판매 시작)</div>
         </div>
       </div>
 
@@ -994,8 +1001,24 @@ tr.asset-gone td { color: var(--fg-faint); }
             <div class="field"><label>공급처 (선택)</label><input id="intake-supplier" placeholder="예: 용산알씨, 하비몰"></div>
             <div class="field" style="grid-column:1/-1"><label>메모 (선택)</label><input id="intake-memo" placeholder="자동 등록 담당에게 전할 말 (예: 3번 상품은 등록 제외)"></div>
           </div>
+          <!-- 구분에 따라 채널 기본 체크가 바뀜: 상품 → 아임웹·스마트스토어·토스 / 제품 → eBay -->
+          <div class="intake-opts">
+            <div class="intake-opt-group">
+              <span class="intake-opt-label">구분</span>
+              <label><input type="radio" name="intake-type" value="resale" checked onchange="intakeTypeChanged()"> 상품 (매입 판매)</label>
+              <label><input type="radio" name="intake-type" value="own" onchange="intakeTypeChanged()"> 제품 (모듈랩 자체 제작)</label>
+            </div>
+            <div class="intake-opt-group">
+              <span class="intake-opt-label">올릴 곳</span>
+              <label><input type="checkbox" id="intake-ch-imweb"> 아임웹 (숨김)</label>
+              <label><input type="checkbox" id="intake-ch-naver"> 스마트스토어 (전시중지)</label>
+              <label><input type="checkbox" id="intake-ch-toss"> 토스 (엑셀)</label>
+              <label><input type="checkbox" id="intake-ch-ebay"> eBay (게시 대기)</label>
+              <span class="intake-opt-hint">ERP 제품·재고에는 항상 반영</span>
+            </div>
+          </div>
           <div style="display:flex;gap:8px">
-            <button class="btn btn-primary" id="intake-submit" onclick="intakeSubmit()">📥 올리고 자동 등록 요청</button>
+            <button class="btn btn-primary" id="intake-submit" onclick="intakeSubmit()">📥 올리고 등록 요청</button>
             <button class="btn btn-outline" onclick="intakeClear()">비우기</button>
           </div>
         </div>
@@ -1008,8 +1031,8 @@ tr.asset-gone td { color: var(--fg-faint); }
         </div>
         <div class="card-body-p0 tbl-wrap">
           <table>
-            <thead><tr><th>올린 날</th><th>입고 폴더</th><th>공급처</th><th>파일</th><th>상태</th><th>결과</th><th></th></tr></thead>
-            <tbody id="intake-tbody"><tr><td colspan="7"><div class="spinner"></div></td></tr></tbody>
+            <thead><tr><th>올린 날</th><th>입고 폴더</th><th>공급처</th><th>올릴 곳</th><th>파일</th><th>상태</th><th>결과</th><th></th></tr></thead>
+            <tbody id="intake-tbody"><tr><td colspan="8"><div class="spinner"></div></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -4704,6 +4727,20 @@ const INTAKE_STATUS = {
 function intakeInit() {
   const d = document.getElementById('intake-date');
   if (!d.value) d.value = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);   // 한국 날짜
+  if (!intake.typeSet) { intakeTypeChanged(); intake.typeSet = true; }
+}
+
+// 올릴 곳 기본값: 상품(매입 판매) → 아임웹·스마트스토어·토스 / 제품(자체 제작) → eBay
+const INTAKE_CHANNELS = [['imweb', '아임웹'], ['naver', '스마트스토어'], ['toss', '토스'], ['ebay', 'eBay']];
+const INTAKE_DEFAULTS = { resale: { imweb: true, naver: true, toss: true, ebay: false },
+                          own:    { imweb: false, naver: false, toss: false, ebay: true } };
+function intakeType() { return document.querySelector('input[name="intake-type"]:checked').value; }
+function intakeTypeChanged() {
+  const def = INTAKE_DEFAULTS[intakeType()];
+  for (const [k] of INTAKE_CHANNELS) document.getElementById('intake-ch-' + k).checked = def[k];
+}
+function intakeChannels() {
+  return Object.fromEntries(INTAKE_CHANNELS.map(([k]) => [k, document.getElementById('intake-ch-' + k).checked]));
 }
 function intakeIsDoc(f) { return /\.(pdf|jpe?g|png|webp)$/i.test(f.name); }
 function intakeAddFiles(files) {
@@ -4733,6 +4770,8 @@ function intakeClear() {
 
 async function intakeSubmit() {
   if (!intake.files.length) { toast('주문서 파일을 먼저 선택하세요'); return; }
+  const channels = intakeChannels();
+  if (!Object.values(channels).some(Boolean) && !confirm('올릴 곳을 하나도 고르지 않았어요. ERP에만 반영할까요?')) return;
   const btn = document.getElementById('intake-submit');
   btn.disabled = true;
   try {
@@ -4750,11 +4789,12 @@ async function intakeSubmit() {
     }
     const { error } = await sb.from('purchase_uploads').insert({
       folder_name: folder, supplier: document.getElementById('intake-supplier').value.trim() || null,
-      memo: document.getElementById('intake-memo').value.trim() || null, files, status: 'pending'
+      memo: document.getElementById('intake-memo').value.trim() || null, files, status: 'pending',
+      channels, product_type: intakeType()
     });
     if (error) throw new Error(error.message);
     intakeClear();
-    toast('주문서를 올렸습니다 ✓ 자동 등록 작업이 곧 처리합니다', 4000);
+    toast('주문서를 올렸습니다 ✓ 등록 작업이 곧 처리합니다', 4000);
     await loadIntake();
   } catch (e) {
     toast('올리기 실패: ' + e.message, 5000);
@@ -4781,24 +4821,55 @@ function intakeSummary(r) {
 async function loadIntake() {
   const { data, error } = await sb.from('purchase_uploads').select('*').order('id', { ascending: false }).limit(30);
   const tbody = document.getElementById('intake-tbody');
-  if (error) { tbody.innerHTML = `<tr><td colspan="7" style="color:var(--danger)">불러오기 실패: ${bulkEsc(error.message)}</td></tr>`; return; }
-  if (!data.length) { tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-title">아직 올린 주문서가 없습니다</div></div></td></tr>`; return; }
+  if (error) { tbody.innerHTML = `<tr><td colspan="8" style="color:var(--danger)">불러오기 실패: ${bulkEsc(error.message)}</td></tr>`; return; }
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-title">아직 올린 주문서가 없습니다</div></div></td></tr>`; return; }
+  intake.rows = data;
   tbody.innerHTML = data.map(r => {
     const [label, color] = INTAKE_STATUS[r.status] || [r.status, 'var(--fg-sub)'];
     const toss  = r.result && r.result.toss_excel
       ? `<button class="btn btn-outline btn-sm" onclick="intakeDownload('${bulkEsc(r.result.toss_excel)}')">토스 엑셀</button>` : '';
     const retry = r.status === 'error'
       ? `<button class="btn btn-outline btn-sm" onclick="intakeRetry(${r.id})">다시 처리</button>` : '';
+    // eBay는 숨김 기능이 없어 '게시 대기'로 만들어 두고, 확인 후 여기서 게시
+    const ebayWait = ((r.result && r.result.products) || []).filter(p => p.ebay_offer_id && !p.ebay_listing_id).length;
+    const ebayBtn = ebayWait
+      ? `<button class="btn btn-primary btn-sm" onclick="intakeEbayPublish(${r.id})">eBay 게시 (${ebayWait})</button>` : '';
+    // 예전 업로드(채널 기록 없음)는 아임웹·스마트스토어·토스
+    const ch = r.channels || INTAKE_DEFAULTS.resale;
+    const chText = INTAKE_CHANNELS.filter(([k]) => ch[k]).map(([, n]) => n).join(' · ') || 'ERP만';
     return `<tr>
       <td>${bulkEsc((r.created_at || '').slice(0, 16).replace('T', ' '))}</td>
       <td class="td-mono">${bulkEsc(r.folder_name || '—')}</td>
       <td>${bulkEsc(r.supplier || '—')}</td>
+      <td style="font-size:12px">${r.product_type === 'own' ? '<span class="badge badge-blue">제품</span> ' : ''}${bulkEsc(chText)}</td>
       <td style="font-size:12px">${(r.files || []).map(f => `<a href="#" onclick="intakeDownload('${bulkEsc(f.path)}');return false">${bulkEsc(f.name)}</a>`).join('<br>')}</td>
       <td><span style="color:${color};font-weight:600">${label}</span></td>
       <td style="font-size:13px;max-width:420px">${intakeSummary(r)}</td>
-      <td style="white-space:nowrap">${toss}${retry}</td>
+      <td style="white-space:nowrap">${ebayBtn}${toss}${retry}</td>
     </tr>`;
   }).join('');
+}
+
+// 게시 대기인 eBay 상품을 게시 (게시 수수료가 생길 수 있어 확인 후)
+async function intakeEbayPublish(id) {
+  const r = (intake.rows || []).find(x => x.id === id);
+  const todo = ((r && r.result && r.result.products) || []).filter(p => p.ebay_offer_id && !p.ebay_listing_id);
+  if (!todo.length) return;
+  if (!confirm(`eBay에 ${todo.length}개 상품을 게시합니다. 게시 수수료가 생길 수 있어요. 계속할까요?\n\n` + todo.map(p => `${p.sku} — ${p.name || ''}`).join('\n'))) return;
+  let ok = 0;
+  for (const p of todo) {
+    try {
+      const resp = await apiPost('ebay-register', { action: 'publish', sku: p.sku });
+      const res  = await resp.json().catch(() => ({}));
+      if (!resp.ok || !res.success) throw new Error(res.error || ('HTTP ' + resp.status));
+      p.ebay_listing_id = res.listingId || 'published';
+      await sb.from('products').update({ ebay_listing_id: p.ebay_listing_id }).eq('sku', p.sku);
+      ok++;
+    } catch (e) { toast(`${p.sku} eBay 게시 실패: ${e.message}`, 6000); }
+  }
+  await sb.from('purchase_uploads').update({ result: r.result, updated_at: new Date().toISOString() }).eq('id', id);
+  toast(`eBay ${ok}개 게시 완료`);
+  await loadIntake();
 }
 
 // 비공개 저장소 파일은 1시간짜리 임시 주소로 내려받음
