@@ -2008,9 +2008,25 @@ const API_BASE = 'https://modulelab-api.vercel.app/api';
 // 네이버는 등록된 IP에서만 호출 가능 → 집·사무실 PC에서 실행하는 '네이버 도우미'로 보냄
 const NAVER_HELPER = 'http://127.0.0.1:8787';
 
+// 도우미가 꺼져 있으면 'modulelab-helper://' 링크로 켜고 준비될 때까지 기다림
+// (PC마다 한 번 naver-helper 폴더의 "도우미 버튼 연결.bat" 을 실행해 둬야 링크가 동작)
+async function ensureNaverHelper() {
+  if (await naverHelperStatus()) return true;
+  toast('네이버 도우미를 켜는 중... 크롬이 물어보면 "열기"를 눌러 주세요', 6000);
+  window.location.href = 'modulelab-helper://start';
+  for (let i = 0; i < 25; i++) {               // 최대 25초
+    await new Promise(r => setTimeout(r, 1000));
+    if (await naverHelperStatus()) { await new Promise(r => setTimeout(r, 1500)); return true; }
+  }
+  return false;
+}
+
 async function helperPost(path, body) {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { showLogin(); throw new Error('로그인이 필요합니다'); }
+  if (!(await ensureNaverHelper())) {
+    throw new Error('네이버 도우미를 켜지 못했어요 — 이 PC에서 "도우미 버튼 연결.bat"을 한 번 실행했는지 확인하거나, "네이버 도우미 실행"을 직접 켜 주세요');
+  }
   try {
     return await fetch(`${NAVER_HELPER}/${path}`, {
       method: 'POST',
@@ -4182,7 +4198,7 @@ async function checkNaverHelper() {
   const s  = await naverHelperStatus();
   el.textContent = s
     ? `✅ 네이버 도우미 실행 중 (v${s.version})`
-    : '❌ 네이버 도우미가 꺼져 있습니다 — 이 PC에서 "네이버 도우미 실행"을 켜 주세요';
+    : '⚪ 네이버 도우미 꺼짐 — 네이버 버튼을 누르면 자동으로 켜져요 (처음 한 번 "도우미 버튼 연결.bat" 실행 필요)';
 }
 
 async function ebayConnect() {
@@ -4258,8 +4274,9 @@ async function bulkErpProducts() {
 async function bulkRegisterNaver() {
   const s = bulkSettings.naver;
   if (!s.asPhone) { toast('채널 설정에서 네이버 A/S 전화번호를 먼저 저장하세요', 4000); bulkOpenSettings(); return; }
-  if (!(await naverHelperStatus())) {
-    toast('네이버 도우미가 꺼져 있습니다 — 이 PC에서 "네이버 도우미 실행"을 켜 주세요', 5000);
+  if (!(await ensureNaverHelper())) {
+    toast('네이버 도우미를 켜지 못했어요 — "도우미 버튼 연결.bat"을 한 번 실행했는지 확인해 주세요', 6000);
+    checkNaverHelper();
     return;
   }
   if (!confirm(`상품 ${bulk.rows.length}개를 네이버 스마트스토어에 등록합니다. 계속할까요?`)) return;
