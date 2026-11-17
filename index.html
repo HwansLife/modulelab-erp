@@ -4894,7 +4894,7 @@ async function loadIntake() {
     const ch = r.channels || INTAKE_DEFAULTS.resale;
     const chText = INTAKE_CHANNELS.filter(([k]) => ch[k]).map(([, n]) => n).join(' · ') || 'ERP만';
     return `<tr>
-      <td>${bulkEsc((r.created_at || '').slice(0, 16).replace('T', ' '))}</td>
+      <td>${r.created_at ? new Date(new Date(r.created_at).getTime() + 9 * 3600000).toISOString().slice(0, 16).replace('T', ' ') : '—'}</td>
       <td class="td-mono">${bulkEsc(r.folder_name || '—')}</td>
       <td>${bulkEsc(r.supplier || '—')}</td>
       <td style="font-size:12px">${r.product_type === 'own' ? '<span class="badge badge-blue">제품</span> ' : ''}${bulkEsc(chText)}</td>
