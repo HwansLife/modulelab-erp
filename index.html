@@ -617,6 +617,32 @@ tr.asset-gone td { color: var(--fg-faint); }
 .asset-preview:empty { display: none; }
 .asset-preview b { color: var(--fg); }
 
+/* 부자재 · BOM · 생산 (2026-11-21) */
+.mat-table th, .mat-table td { white-space: nowrap; }
+#mat-tbody tr:not(.ptype-group-row) { cursor: pointer; }
+.bom-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; align-items: start; }
+.bom-prod-list { display: flex; flex-direction: column; gap: 6px; }
+.bom-prod { text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; font-family: inherit; font-size: 13px; color: var(--fg); }
+.bom-prod.active { border-color: var(--accent); background: var(--accent-lt); }
+.bom-prod small { display: block; color: var(--fg-faint); font-size: 11px; margin-top: 2px; }
+.bom-sec { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
+.bom-sec-head { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; background: var(--surface2); font-size: 13px; font-weight: 700; }
+.bom-sec-head .sum { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--fg); }
+.bom-sec table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.bom-sec th { text-align: left; font-weight: 600; color: var(--fg-faint); padding: 6px 8px; font-size: 11.5px; }
+.bom-sec td { padding: 4px 8px; border-top: 1px solid var(--border); vertical-align: middle; }
+.bom-sec input, .bom-sec select { width: 100%; padding: 5px 7px; font-size: 12.5px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); font-family: inherit; }
+.bom-sec input[type=number] { text-align: right; }
+.bom-sec .num { text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 12px; white-space: nowrap; }
+.bom-sec .x { border: 0; background: none; color: var(--fg-faint); cursor: pointer; font-size: 15px; padding: 2px 6px; }
+.bom-sec .add { margin: 6px 8px 8px; }
+.bom-total { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px; border-radius: 10px; background: var(--accent-lt); margin-bottom: 12px; }
+.bom-total b { font-size: 20px; color: var(--accent); }
+.bom-note { font-size: 12px; color: var(--fg-faint); line-height: 1.7; margin: 4px 2px 12px; }
+.prod-need { font-size: 12.5px; line-height: 1.8; }
+.prod-need .short { color: var(--danger); font-weight: 700; }
+@media (max-width: 900px) { .bom-layout { grid-template-columns: 1fr; } .bom-prod-list { flex-direction: row; overflow-x: auto; } .bom-prod { min-width: 180px; } }
+
 /* 제품 / 상품 구분 탭 */
 .ptype-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
 .ptype-tab {
@@ -836,6 +862,11 @@ tr.asset-gone td { color: var(--fg-faint); }
       <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
       제품 관리
     </button>
+    <button class="nav-item" onclick="showPanel('materials')">
+      <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+      부자재 · BOM
+      <span class="nav-badge" id="nav-mat-badge" hidden>!</span>
+    </button>
 
     <div class="nav-section-label">거래</div>
     <button class="nav-item" onclick="showPanel('orders')">
@@ -1010,8 +1041,9 @@ tr.asset-gone td { color: var(--fg-faint); }
               <span class="intake-opt-label">구분</span>
               <label><input type="radio" name="intake-type" value="resale" checked onchange="intakeTypeChanged()"> 상품 (매입 판매)</label>
               <label><input type="radio" name="intake-type" value="own" onchange="intakeTypeChanged()"> 제품 (모듈랩 자체 제작)</label>
+              <label><input type="radio" name="intake-type" value="material" onchange="intakeTypeChanged()"> 부자재 (제작용 — 재고만)</label>
             </div>
-            <div class="intake-opt-group">
+            <div class="intake-opt-group" id="intake-ch-group">
               <span class="intake-opt-label">올릴 곳</span>
               <label><input type="checkbox" id="intake-ch-imweb"> 아임웹 (숨김)</label>
               <label><input type="checkbox" id="intake-ch-naver"> 스마트스토어 (전시중지)</label>
@@ -1190,6 +1222,58 @@ tr.asset-gone td { color: var(--fg-faint); }
             <tbody id="expenses-tbody">
               <tr><td colspan="5"><div class="spinner"></div></td></tr>
             </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 부자재 · BOM · 생산 (2026-11-21) ── -->
+    <section class="panel" id="panel-materials">
+      <div class="page-head">
+        <div>
+          <div class="page-title">부자재 · BOM</div>
+          <div class="page-sub">자체 제품을 만드는 부자재 재고, 제품별 부품 구성표(BOM)와 원가, 생산 기록 · 단가는 모두 부가세 포함 기준</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-outline" onclick="openProdRun()">+ 생산 기록</button>
+          <button class="btn btn-primary" onclick="openMatForm(null)">+ 부자재 등록</button>
+        </div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-label">부자재</div><div class="kpi-value" id="kpi-mat-count">—</div><div class="kpi-delta" id="kpi-mat-count-sub">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">부자재 재고 금액</div><div class="kpi-value accent" id="kpi-mat-value">—</div><div class="kpi-delta">재고 × 단가 (부가세 포함)</div></div>
+        <div class="kpi-card"><div class="kpi-label">재고 부족</div><div class="kpi-value warn" id="kpi-mat-short">—</div><div class="kpi-delta">적정 재고보다 적은 부자재</div></div>
+        <div class="kpi-card"><div class="kpi-label">이번 달 생산</div><div class="kpi-value success" id="kpi-mat-made">—</div><div class="kpi-delta" id="kpi-mat-made-sub">—</div></div>
+      </div>
+      <div class="ptype-tabs" id="mat-tabs"></div>
+
+      <!-- 부자재 목록 -->
+      <div class="card" id="mat-view-list">
+        <div class="card-body-p0 tbl-wrap">
+          <table class="mat-table">
+            <thead><tr>
+              <th>부자재</th><th>분류</th><th class="td-right">단가 (부가세 포함)</th><th class="td-right">재고</th>
+              <th class="td-right">재고 금액</th><th>구입처</th><th>쓰는 제품</th><th></th>
+            </tr></thead>
+            <tbody id="mat-tbody"><tr><td colspan="8"><div class="spinner"></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- BOM · 원가 -->
+      <div id="mat-view-bom" hidden>
+        <div class="bom-layout">
+          <div class="bom-prod-list" id="bom-prod-list"></div>
+          <div id="bom-editor"></div>
+        </div>
+      </div>
+
+      <!-- 생산 기록 -->
+      <div class="card" id="mat-view-runs" hidden>
+        <div class="card-body-p0 tbl-wrap">
+          <table class="mat-table">
+            <thead><tr><th>생산일</th><th>제품</th><th class="td-right">수량</th><th class="td-right">1개 원가</th><th class="td-right">합계</th><th>메모</th><th></th></tr></thead>
+            <tbody id="runs-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -1911,6 +1995,130 @@ tr.asset-gone td { color: var(--fg-faint); }
   </div>
 </div>
 
+<!-- 부자재 등록 · 수정 (2026-11-21) -->
+<div class="overlay" id="overlay-mat">
+  <div class="overlay-card" style="max-width:640px">
+    <div class="overlay-head">
+      <span class="overlay-title" id="mt-title">부자재 등록</span>
+      <button class="overlay-close" onclick="closeOverlay('overlay-mat')">✕</button>
+    </div>
+    <div class="overlay-body">
+      <input type="hidden" id="mt-id">
+      <div class="field-row">
+        <div class="field"><label>분류 *</label>
+          <select id="mt-kind" onchange="matKindChanged()">
+            <option value="part">구매 부품 (자석·볼트·너트·스페이서 …)</option>
+            <option value="filament">필라멘트 · 레진</option>
+            <option value="packaging">포장재</option>
+            <option value="other">기타</option>
+          </select>
+        </div>
+        <div class="field"><label>단위 *</label><input id="mt-unit" value="개" placeholder="개, 세트, g, m …" oninput="matPricePreview()"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>이름 *</label><input id="mt-name" placeholder="예: 네오디뮴 자석"></div>
+        <div class="field"><label>규격</label><input id="mt-spec" placeholder="예: 15x4mm, M3x8 접시"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>산 가격 (₩)</label><input id="mt-price" type="number" step="any" placeholder="예: 7000" oninput="matPricePreview()"></div>
+        <div class="field"><label>그 가격이 몇 <span id="mt-unit-label">개</span> 값인가요?</label><input id="mt-per" type="number" step="any" value="1" oninput="matPricePreview()"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>화폐</label>
+          <select id="mt-cur" onchange="matCurChanged('mt')">
+            <option value="KRW">원 (₩)</option>
+            <option value="USD">달러 ($) — 해외 구매</option>
+          </select>
+        </div>
+        <div class="field" id="mt-fx-row"><label>환율 (원/달러) <a href="#" onclick="matFetchFx('mt');return false" style="font-weight:400">오늘 환율 넣기</a></label><input id="mt-fx" type="number" step="any" placeholder="예: 1400" oninput="matPricePreview()"></div>
+      </div>
+      <div class="field" id="mt-vat-row"><label>부가세</label>
+        <select id="mt-vat" onchange="matPricePreview()">
+          <option value="incl">부가세 포함 가격 (카드 영수증 금액 등)</option>
+          <option value="excl">부가세 별도 가격 (공급가 — ×1.1 해서 저장)</option>
+        </select>
+      </div>
+      <div class="asset-preview" id="mt-preview"></div>
+      <div class="field-row">
+        <div class="field" id="mt-stock-row"><label>지금 있는 수량 (처음 등록할 때)</label><input id="mt-stock" type="number" step="any" placeholder="0"></div>
+        <div class="field"><label>적정 재고 (이 아래면 '부족')</label><input id="mt-min" type="number" step="any" placeholder="예: 20"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>구입처</label><select id="mt-partner"><option value="">—</option></select></div>
+        <div class="field"><label>원산지</label><input id="mt-origin" placeholder="국산, 중국산 …"></div>
+      </div>
+      <div class="field"><label>구매 주소 (다시 살 때)</label><input id="mt-url" placeholder="https://"></div>
+      <div class="field"><label>메모</label><textarea id="mt-memo"></textarea></div>
+    </div>
+    <div class="overlay-foot">
+      <button class="btn btn-outline" id="mt-delete" style="margin-right:auto;color:var(--danger)" onclick="deleteMat()">삭제</button>
+      <button class="btn btn-outline" onclick="closeOverlay('overlay-mat')">취소</button>
+      <button class="btn btn-primary" onclick="saveMat()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 부자재 입고 · 재고 조정 -->
+<div class="overlay" id="overlay-matmove">
+  <div class="overlay-card" style="max-width:480px">
+    <div class="overlay-head">
+      <span class="overlay-title" id="mm-title">입고</span>
+      <button class="overlay-close" onclick="closeOverlay('overlay-matmove')">✕</button>
+    </div>
+    <div class="overlay-body">
+      <input type="hidden" id="mm-id"><input type="hidden" id="mm-mode">
+      <div class="field" id="mm-name" style="font-weight:700"></div>
+      <div class="field-row">
+        <div class="field"><label id="mm-qty-label">들어온 수량</label><input id="mm-qty" type="number" step="any"></div>
+        <div class="field"><label>날짜</label><input id="mm-date" type="date"></div>
+      </div>
+      <div id="mm-price-box">
+        <div class="field-row">
+          <div class="field"><label>이번에 산 가격 (₩, 비우면 단가 그대로)</label><input id="mm-price" type="number" step="any"></div>
+          <div class="field"><label>그 가격이 몇 단위 값?</label><input id="mm-per" type="number" step="any" value="1"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>화폐</label>
+            <select id="mm-cur" onchange="matCurChanged('mm')"><option value="KRW">원 (₩)</option><option value="USD">달러 ($)</option></select>
+          </div>
+          <div class="field" id="mm-fx-row"><label>환율 <a href="#" onclick="matFetchFx('mm');return false" style="font-weight:400">오늘 환율 넣기</a></label><input id="mm-fx" type="number" step="any"></div>
+        </div>
+        <div class="field" id="mm-vat-row"><label>부가세</label>
+          <select id="mm-vat"><option value="incl">부가세 포함 가격</option><option value="excl">부가세 별도 가격 (×1.1)</option></select>
+        </div>
+      </div>
+      <div class="field"><label>메모</label><input id="mm-memo" placeholder="예: 쿠팡 주문, 실사 결과"></div>
+    </div>
+    <div class="overlay-foot">
+      <button class="btn btn-outline" onclick="closeOverlay('overlay-matmove')">취소</button>
+      <button class="btn btn-primary" onclick="saveMatMove()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 생산 기록 -->
+<div class="overlay" id="overlay-prodrun">
+  <div class="overlay-card" style="max-width:520px">
+    <div class="overlay-head">
+      <span class="overlay-title">생산 기록</span>
+      <button class="overlay-close" onclick="closeOverlay('overlay-prodrun')">✕</button>
+    </div>
+    <div class="overlay-body">
+      <div class="field"><label>제품 *</label><select id="pr-product" onchange="prodRunPreview()"></select></div>
+      <div class="field-row">
+        <div class="field"><label>만든 수량 *</label><input id="pr-qty" type="number" step="1" min="1" value="1" oninput="prodRunPreview()"></div>
+        <div class="field"><label>생산일</label><input id="pr-date" type="date"></div>
+      </div>
+      <div class="field"><label>메모</label><input id="pr-memo" placeholder="예: 2차 생산"></div>
+      <div class="asset-preview prod-need" id="pr-preview"></div>
+    </div>
+    <div class="overlay-foot">
+      <button class="btn btn-outline" onclick="closeOverlay('overlay-prodrun')">취소</button>
+      <button class="btn btn-primary" onclick="saveProdRun()">저장 (부자재 차감 · 제품 재고 증가)</button>
+    </div>
+  </div>
+</div>
+
 <!-- 배송 처리 -->
 <div class="overlay" id="overlay-ship">
   <div class="overlay-card">
@@ -2205,6 +2413,7 @@ async function loadPanel(id) {
     if (id === 'partners') await loadPartners();
     if (id === 'expenses') await loadExpenses();
     if (id === 'assets') await loadAssets();
+    if (id === 'materials') await loadMaterials();
     if (id === 'products') await loadProductsMaster();
     if (id === 'dev') await loadDev();
     if (id === 'bulk') { await bulkLoadSettings(); checkNaverHelper(); }
@@ -2829,6 +3038,654 @@ async function deleteAsset() {
   closeOverlay('overlay-asset');
   await loadAssets();
   toast('자산을 삭제했습니다');
+}
+
+// ══ 부자재 · BOM · 생산 (2026-11-21) ═══════════════════════════════
+// 단가는 모두 부가세 포함 기준. 원가(1개) = 부자재(필라멘트·부품·포장재) + 출력 시간 × 시간당 출력비 (사장님 결정 11-21: 인건비·고정비 제외)
+const MAT_KINDS = [
+  { key: 'part', label: '구매 부품', sub: '자석 · 볼트 · 너트 · 인서트 · 스페이서' },
+  { key: 'filament', label: '필라멘트 · 레진', sub: 'g 단위 (1kg 가격으로 입력)' },
+  { key: 'packaging', label: '포장재', sub: '박스 · 완충재 · 라벨' },
+  { key: 'other', label: '기타', sub: '' },
+];
+// 시간당 출력비 산정 기준 (기본값 = TRX4 견적서 원가계산서의 H2C 숫자, 사장님 결정 11-21: 월 22일 × 8시간 = 176시간 고정 기준)
+//   내부 시간당 = 감가상각(월) ÷ 기준시간 + 유지보수(월) ÷ 기준시간 + 소비전력(W) ÷ 1000 × 전기단가  ≈ 316 + 455 + 24 = 794원
+//   외부 견적 시간당 = 4,000원 (국내 출력대행 시세 3,000~4,000원 — 마진 포함 판매가)
+const COST_BASE = { dep_month: 55556, maint_month: 80000, watts: 197, kwh: 120, days: 22, hours: 8, quote_rate: 4000 };
+let BOM_FORMULA_OPEN = false;
+let MAT_TAB = 'list';
+let BOM_PID = null;
+let BOM_DRAFT = null;
+
+const matN = v => (v === '' || v == null || isNaN(Number(v))) ? 0 : Number(v);
+const matRound = v => Math.round(v * 100) / 100;
+function matUnitCost(price, per, vat, fx) {           // 1단위 단가 (원화, 부가세 포함). 달러면 fx(원/달러)를 곱함
+  const p = matN(price), q = matN(per) || 1;
+  return p / q * (matN(fx) || 1) * (vat === 'excl' ? 1.1 : 1);
+}
+// 화폐 칸: 달러면 환율 칸을 보이고 부가세 칸은 숨김 (해외 구매는 부가세 없음 — 관부가세를 냈으면 그 금액을 가격에 더해서 입력)
+function matCurChanged(pre) {
+  const usd = document.getElementById(pre + '-cur').value === 'USD';
+  document.getElementById(pre + '-fx-row').hidden = !usd;
+  document.getElementById(pre + '-vat-row').hidden = usd;
+  if (usd) { document.getElementById(pre + '-vat').value = 'incl'; if (!document.getElementById(pre + '-fx').value) matFetchFx(pre); }
+  if (pre === 'mt') matPricePreview();
+}
+// 오늘 환율 (open.er-api.com 무료, 하루 한 번 갱신되는 기준 환율 — 카드 환전 수수료는 넣지 않음)
+async function matFetchFx(pre) {
+  try {
+    const r = await fetch('https://open.er-api.com/v6/latest/USD');
+    const j = await r.json();
+    const krw = j && j.rates && j.rates.KRW;
+    if (!krw) throw new Error('환율 없음');
+    document.getElementById(pre + '-fx').value = Math.round(krw * 100) / 100;
+    if (pre === 'mt') matPricePreview();
+    toast(`오늘 환율 1달러 = ${Math.round(krw).toLocaleString('ko-KR')}원`);
+  } catch (e) { toast('환율을 불러오지 못했어요 — 직접 입력해 주세요'); }
+}
+function matQty(n, unit) { return `${Number(n || 0).toLocaleString('ko-KR', { maximumFractionDigits: 2 })}${bulkEsc(unit || '')}`; }
+function matWon(n) { return Math.round(Number(n) || 0).toLocaleString('ko-KR') + '원'; }
+function matUnitPrice(m) {                               // 표시용 단가 (필라멘트는 1kg 값도)
+  const u = Number(m.unit_cost) || 0;
+  if (m.unit === 'g') return `${matWon(u * 1000)}/kg`;
+  return `${u.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}원/${bulkEsc(m.unit)}`;
+}
+
+async function loadMaterials() {
+  const [mR, bR, rR, pR, ptR, cR] = await Promise.all([
+    sb.from('materials').select('*').order('kind').order('name'),
+    sb.from('bom_items').select('*').order('sort'),
+    sb.from('production_runs').select('*').order('made_at', { ascending: false }).order('id', { ascending: false }).limit(200),
+    sb.from('products').select('id,sku,name,stock,cost_price,sell_price,product_type,cost_profile,active').eq('product_type', 'own').order('id'),
+    state.partners && state.partners.length ? Promise.resolve({ data: state.partners }) : sb.from('partners').select('*').order('name'),
+    sb.from('app_settings').select('value').eq('key', 'cost').maybeSingle(),
+  ]);
+  state.costSettings = cR?.data?.value || {};
+  const err = mR.error || bR.error || rR.error || pR.error;
+  if (err) {
+    document.getElementById('mat-tbody').innerHTML = `<tr><td colspan="8"><div class="empty-state">
+      <div class="empty-icon">🧩</div><div class="empty-title">부자재 표가 아직 없어요</div>
+      <div class="empty-desc">Supabase SQL Editor에서 <b>2026-11-21_materials_bom.sql</b> 을 실행한 뒤 새로고침해 주세요<br><small>${bulkEsc(err.message)}</small></div></div></td></tr>`;
+    return;
+  }
+  setStatus(true);
+  state.materials = mR.data || [];
+  state.bom = bR.data || [];
+  state.runs = rR.data || [];
+  state.ownProducts = (pR.data || []).filter(p => !/^TEST-/i.test(p.sku || ''));
+  state.partners = ptR.data || [];
+  if (!BOM_PID || !state.ownProducts.some(p => p.id === BOM_PID)) BOM_PID = state.ownProducts[0]?.id || null;
+  BOM_DRAFT = null;
+  renderMaterials();
+}
+
+function renderMaterials() {
+  const mats = state.materials || [];
+  const live = mats.filter(m => m.active !== false);
+  const short = live.filter(m => m.min_stock != null && Number(m.stock) < Number(m.min_stock));
+  const ym = new Date().toISOString().slice(0, 7);
+  const monthRuns = (state.runs || []).filter(r => (r.made_at || '').startsWith(ym));
+  document.getElementById('kpi-mat-count').textContent = live.length + '종';
+  document.getElementById('kpi-mat-count-sub').textContent = MAT_KINDS.map(k => `${k.label} ${live.filter(m => m.kind === k.key).length}`).join(' · ');
+  document.getElementById('kpi-mat-value').textContent = fmtShort(Math.round(live.reduce((s, m) => s + Math.max(0, Number(m.stock) || 0) * (Number(m.unit_cost) || 0), 0)));
+  document.getElementById('kpi-mat-short').textContent = short.length + '건';
+  document.getElementById('kpi-mat-made').textContent = monthRuns.reduce((s, r) => s + Number(r.qty || 0), 0) + '개';
+  document.getElementById('kpi-mat-made-sub').textContent = `${monthRuns.length}번 생산 · 원가 ${fmtShort(Math.round(monthRuns.reduce((s, r) => s + (Number(r.unit_cost) || 0) * Number(r.qty || 0), 0)))}`;
+  const badge = document.getElementById('nav-mat-badge');
+  badge.hidden = !short.length; badge.textContent = short.length;
+
+  const tabs = [
+    { key: 'list', label: '부자재 재고', n: live.length },
+    { key: 'bom', label: 'BOM · 원가', n: (state.ownProducts || []).length },
+    { key: 'runs', label: '생산 기록', n: (state.runs || []).length },
+  ];
+  const box = document.getElementById('mat-tabs');
+  box.innerHTML = tabs.map(t => `<button class="ptype-tab${t.key === MAT_TAB ? ' active' : ''}" data-k="${t.key}">${t.label} <span class="cnt">${t.n}</span></button>`).join('');
+  box.querySelectorAll('.ptype-tab').forEach(b => b.onclick = () => { MAT_TAB = b.dataset.k; renderMaterials(); });
+  document.getElementById('mat-view-list').hidden = MAT_TAB !== 'list';
+  document.getElementById('mat-view-bom').hidden = MAT_TAB !== 'bom';
+  document.getElementById('mat-view-runs').hidden = MAT_TAB !== 'runs';
+  if (MAT_TAB === 'list') renderMatList();
+  if (MAT_TAB === 'bom') renderBom();
+  if (MAT_TAB === 'runs') renderRuns();
+}
+
+function matUsedBy(id) {
+  const pids = [...new Set((state.bom || []).filter(b => b.material_id === id).map(b => b.product_id))];
+  return pids.map(pid => (state.ownProducts || []).find(p => p.id === pid)).filter(Boolean);
+}
+
+function renderMatList() {
+  const mats = state.materials || [];
+  const tbody = document.getElementById('mat-tbody');
+  if (!mats.length) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">
+      <div class="empty-icon">🧩</div><div class="empty-title">등록된 부자재 없음</div>
+      <div class="empty-desc">자석, 볼트, 너트, 필라멘트처럼 자체 제품을 만들 때 쓰는 재료를 등록해 보세요</div>
+      <button class="btn btn-primary" onclick="openMatForm(null)">+ 부자재 등록</button></div></td></tr>`;
+    return;
+  }
+  const partnerName = id => (state.partners || []).find(p => p.id === id)?.name || '';
+  tbody.innerHTML = MAT_KINDS.map(k => {
+    const items = mats.filter(m => m.kind === k.key);
+    if (!items.length) return '';
+    return `<tr class="ptype-group-row"><td colspan="8">${k.label}<span class="sub">${k.sub} · ${items.length}종</span></td></tr>` +
+      items.map(m => {
+        const low = m.min_stock != null && Number(m.stock) < Number(m.min_stock);
+        const neg = Number(m.stock) < 0;
+        const used = matUsedBy(m.id).map(p => bulkEsc((p.name || '').replace(/^모듈랩\s*/, ''))).join(', ') || '<span style="color:var(--fg-faint)">—</span>';
+        const vatTag = m.input_vat_included === false ? ' <span class="badge badge-gray" title="부가세 별도 가격으로 입력 → ×1.1 해서 저장">별도→포함</span>' : '';
+        return `<tr class="${m.active === false ? 'asset-gone' : ''}" onclick="openMatForm(${m.id})">
+          <td><strong>${bulkEsc(m.name)}</strong>${m.spec ? `<span class="asset-name-sub">${bulkEsc(m.spec)}${m.origin ? ' · ' + bulkEsc(m.origin) : ''}</span>` : (m.origin ? `<span class="asset-name-sub">${bulkEsc(m.origin)}</span>` : '')}</td>
+          <td>${k.label}</td>
+          <td class="td-right td-mono">${matUnitPrice(m)}${vatTag}</td>
+          <td class="td-right">${neg || low ? `<span class="badge badge-red" title="${m.min_stock != null ? '적정 재고 ' + m.min_stock : '재고가 모자람'}">${matQty(m.stock, m.unit)} ${neg ? '모자람' : '부족'}</span>` : matQty(m.stock, m.unit)}</td>
+          <td class="td-right td-mono">${matWon(Math.max(0, Number(m.stock) || 0) * (Number(m.unit_cost) || 0))}</td>
+          <td>${bulkEsc(partnerName(m.partner_id)) || '—'}</td>
+          <td style="white-space:normal;min-width:140px;font-size:12px">${used}</td>
+          <td onclick="event.stopPropagation()" style="white-space:nowrap">
+            <button class="btn btn-outline btn-sm" onclick="openMatMove(${m.id},'in')">입고</button>
+            <button class="btn btn-outline btn-sm" onclick="openMatMove(${m.id},'adjust')">재고 조정</button>
+            ${m.buy_url ? `<a class="btn btn-outline btn-sm" href="${bulkEsc(m.buy_url)}" target="_blank" rel="noopener">구매</a>` : ''}
+          </td>
+        </tr>`;
+      }).join('');
+  }).join('');
+}
+
+// ── 부자재 등록 · 수정 ──
+function openMatForm(id) {
+  const m = id ? (state.materials || []).find(x => x.id === id) : null;
+  const v = (elId, val) => { document.getElementById(elId).value = val ?? ''; };
+  document.getElementById('mt-title').textContent = m ? '부자재 정보' : '부자재 등록';
+  document.getElementById('mt-delete').hidden = !m;
+  document.getElementById('mt-stock-row').hidden = !!m;   // 등록 후 재고는 입고 · 재고 조정으로만
+  v('mt-id', m?.id); v('mt-kind', m?.kind || 'part'); v('mt-unit', m?.unit || '개');
+  v('mt-name', m?.name); v('mt-spec', m?.spec);
+  v('mt-price', m ? (m.input_price ?? m.unit_cost) : ''); v('mt-per', m?.input_qty ?? 1);
+  v('mt-vat', m && m.input_vat_included === false ? 'excl' : 'incl');
+  v('mt-cur', m?.input_currency || 'KRW'); v('mt-fx', m?.input_fx);
+  matCurChanged('mt');
+  v('mt-stock', ''); v('mt-min', m?.min_stock); v('mt-origin', m?.origin); v('mt-url', m?.buy_url); v('mt-memo', m?.memo);
+  const sel = document.getElementById('mt-partner');
+  sel.innerHTML = '<option value="">—</option>' + (state.partners || []).map(p => `<option value="${p.id}">${bulkEsc(p.name)}</option>`).join('');
+  sel.value = m?.partner_id || '';
+  if (!m) matKindChanged(); else matPricePreview();
+  openOverlay('overlay-mat');
+}
+function matKindChanged() {
+  const isFil = document.getElementById('mt-kind').value === 'filament';
+  if (!document.getElementById('mt-id').value) {
+    document.getElementById('mt-unit').value = isFil ? 'g' : '개';
+    document.getElementById('mt-per').value = isFil ? 1000 : 1;
+  }
+  matPricePreview();
+}
+function matPricePreview() {
+  const unit = document.getElementById('mt-unit').value.trim() || '개';
+  document.getElementById('mt-unit-label').textContent = unit;
+  const price = document.getElementById('mt-price').value, per = document.getElementById('mt-per').value;
+  const vat = document.getElementById('mt-vat').value;
+  const usd = document.getElementById('mt-cur').value === 'USD', fx = usd ? document.getElementById('mt-fx').value : 1;
+  const u = matUnitCost(price, per, vat, fx);
+  document.getElementById('mt-preview').innerHTML = price === '' ? '' :
+    `원가 계산에 쓰는 단가: <b>${u.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}원/${bulkEsc(unit)}</b> (부가세 포함)` +
+    (unit === 'g' ? ` · 1kg = <b>${matWon(u * 1000)}</b>` : '') + (vat === 'excl' ? ' · 입력 가격 ×1.1' : '') +
+    (usd ? (matN(fx) ? ` · $${price} × 환율 ${Number(fx).toLocaleString('ko-KR')}원` : ' · <span style="color:var(--danger)">환율을 넣어 주세요</span>') : '');
+}
+async function saveMat() {
+  const g = id => document.getElementById(id).value.trim();
+  const id = Number(g('mt-id')) || null;
+  const row = {
+    kind: g('mt-kind'), name: g('mt-name'), spec: g('mt-spec') || null, unit: g('mt-unit') || '개',
+    input_price: g('mt-price') === '' ? null : Number(g('mt-price')), input_qty: matN(g('mt-per')) || 1,
+    input_vat_included: g('mt-cur') === 'USD' || g('mt-vat') !== 'excl',
+    input_currency: g('mt-cur') || 'KRW', input_fx: g('mt-cur') === 'USD' ? (Number(g('mt-fx')) || null) : null,
+    unit_cost: matRound(matUnitCost(g('mt-price'), g('mt-per'), g('mt-cur') === 'USD' ? 'incl' : g('mt-vat'), g('mt-cur') === 'USD' ? g('mt-fx') : 1)),
+    min_stock: g('mt-min') === '' ? null : Number(g('mt-min')),
+    partner_id: Number(g('mt-partner')) || null, origin: g('mt-origin') || null, buy_url: g('mt-url') || null,
+    memo: g('mt-memo') || null, updated_at: new Date().toISOString(),
+  };
+  if (!row.name) { toast('이름을 입력하세요'); return; }
+  if (row.input_currency === 'USD' && !row.input_fx) { toast('달러 가격은 환율을 넣어 주세요'); return; }
+  try {
+    if (id) await sbPatch('materials', id, row);
+    else {
+      const made = await sbPost('materials', row);
+      const first = matN(g('mt-stock'));
+      if (first && made?.[0]) await sbPost('material_moves', { material_id: made[0].id, qty: first, kind: 'adjust', unit_cost: row.unit_cost, memo: '처음 등록' });
+    }
+    closeOverlay('overlay-mat');
+    await loadMaterials();
+    toast(id ? '저장했습니다 ✓' : '부자재를 등록했습니다 ✓');
+  } catch (e) { toast('오류: ' + e.message); }
+}
+async function deleteMat() {
+  const id = Number(document.getElementById('mt-id').value);
+  if (!id) return;
+  const used = matUsedBy(id);
+  if (used.length) { toast('BOM에서 쓰는 부자재라 지울 수 없어요: ' + used.map(p => p.name).join(', ')); return; }
+  if (!confirm('이 부자재와 입출고 기록을 모두 지울까요?')) return;
+  const { error } = await sb.from('materials').delete().eq('id', id);
+  if (error) { toast('삭제 실패: ' + error.message); return; }
+  closeOverlay('overlay-mat');
+  await loadMaterials();
+  toast('삭제했습니다');
+}
+
+// ── 입고 · 재고 조정 ──
+function openMatMove(id, mode) {
+  const m = (state.materials || []).find(x => x.id === id);
+  if (!m) return;
+  document.getElementById('mm-id').value = id;
+  document.getElementById('mm-mode').value = mode;
+  document.getElementById('mm-title').textContent = mode === 'in' ? '입고 (산 것 넣기)' : '재고 조정 (실제 세어 본 수량)';
+  document.getElementById('mm-name').innerHTML = `${bulkEsc(m.name)} ${m.spec ? '· ' + bulkEsc(m.spec) : ''}<div style="font-weight:400;font-size:12px;color:var(--fg-faint)">지금 재고 ${matQty(m.stock, m.unit)}</div>`;
+  document.getElementById('mm-qty-label').textContent = mode === 'in' ? `들어온 수량 (${m.unit})` : `실제 있는 수량 (${m.unit})`;
+  document.getElementById('mm-qty').value = mode === 'adjust' ? Number(m.stock) : '';
+  document.getElementById('mm-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('mm-price-box').hidden = mode !== 'in';
+  document.getElementById('mm-price').value = '';
+  document.getElementById('mm-per').value = m.unit === 'g' ? 1000 : 1;
+  document.getElementById('mm-vat').value = m.input_vat_included === false ? 'excl' : 'incl';
+  document.getElementById('mm-cur').value = m.input_currency || 'KRW'; document.getElementById('mm-fx').value = '';
+  document.getElementById('mm-fx-row').hidden = document.getElementById('mm-cur').value !== 'USD';
+  document.getElementById('mm-vat-row').hidden = document.getElementById('mm-cur').value === 'USD';
+  document.getElementById('mm-memo').value = '';
+  openOverlay('overlay-matmove');
+}
+async function saveMatMove() {
+  const id = Number(document.getElementById('mm-id').value);
+  const mode = document.getElementById('mm-mode').value;
+  const m = (state.materials || []).find(x => x.id === id);
+  const raw = document.getElementById('mm-qty').value;
+  if (!m || raw === '' || isNaN(Number(raw))) { toast('수량을 입력하세요'); return; }
+  const qty = mode === 'in' ? Number(raw) : Number(raw) - Number(m.stock);
+  if (mode === 'in' && qty <= 0) { toast('들어온 수량은 0보다 커야 해요'); return; }
+  if (mode === 'adjust' && qty === 0) { closeOverlay('overlay-matmove'); return; }
+  const price = document.getElementById('mm-price').value;
+  const vat = document.getElementById('mm-vat').value, per = document.getElementById('mm-per').value;
+  const usd = document.getElementById('mm-cur').value === 'USD', fx = Number(document.getElementById('mm-fx').value) || null;
+  if (mode === 'in' && price !== '' && usd && !fx) { toast('달러 가격은 환율을 넣어 주세요'); return; }
+  const newUnit = mode === 'in' && price !== '' ? matRound(matUnitCost(price, per, usd ? 'incl' : vat, usd ? fx : 1)) : null;
+  try {
+    await sbPost('material_moves', {
+      material_id: id, qty, kind: mode === 'in' ? 'in' : 'adjust', unit_cost: newUnit ?? m.unit_cost,
+      moved_at: document.getElementById('mm-date').value || null, memo: [document.getElementById('mm-memo').value.trim(), usd && price !== '' ? `$${price} × 환율 ${fx}` : ''].filter(Boolean).join(' · ') || null,
+    });
+    if (newUnit != null) await sbPatch('materials', id, { unit_cost: newUnit, input_price: Number(price), input_qty: matN(per) || 1, input_vat_included: usd || vat !== 'excl', input_currency: usd ? 'USD' : 'KRW', input_fx: usd ? fx : null, updated_at: new Date().toISOString() });
+    closeOverlay('overlay-matmove');
+    await loadMaterials();
+    toast(mode === 'in' ? `입고 ${qty}${m.unit} ✓` : `재고를 ${raw}${m.unit}로 맞췄어요 ✓`);
+  } catch (e) { toast('오류: ' + e.message); }
+}
+
+// ── BOM · 원가 ──
+function bomDraftFor(pid) {
+  const p = (state.ownProducts || []).find(x => x.id === pid);
+  const prof = p?.cost_profile || {};
+  return {
+    pid,
+    lines: (state.bom || []).filter(b => b.product_id === pid).map(b => ({ material_id: b.material_id, qty: Number(b.qty), loss_pct: Number(b.loss_pct) || 0, memo: b.memo || '' })),
+    print_minutes: Number(prof.print_minutes) || 0,
+    memo: prof.memo || '',
+  };
+}
+// 원가(1개) = 부자재(필라멘트 g + 부품 + 포장재) + 출력 시간 × 시간당 출력비. 인건비·임대료 등은 넣지 않음 (사장님 결정 11-21)
+function bomCalc(d) {
+  const matOf = id => (state.materials || []).find(m => m.id === id);
+  const lineCost = l => { const m = matOf(l.material_id); return m ? matN(l.qty) * (1 + matN(l.loss_pct) / 100) * (Number(m.unit_cost) || 0) : 0; };
+  const sumKind = f => d.lines.filter(l => f(matOf(l.material_id)?.kind)).reduce((s, l) => s + lineCost(l), 0);
+  const r = {
+    filament: sumKind(k => k === 'filament'),
+    parts: sumKind(k => k !== 'filament' && k !== 'packaging'),
+    packaging: sumKind(k => k === 'packaging'),
+    print: matN(d.print_minutes) / 60 * printRate(),
+  };
+  r.materials = r.filament + r.parts + r.packaging;
+  r.total = r.materials + r.print;
+  r.quotePrint = matN(d.print_minutes) / 60 * quoteRate();
+  r.quote = r.materials + r.quotePrint;            // 외부 견적 기준가 (마진·모델링·부가세·배송비 별도)
+  r.lineCost = lineCost;
+  return r;
+}
+function costBase() { const s = { ...(state.costSettings || {}) }; delete s.print_rate; return { ...COST_BASE, ...s }; }
+function rateParts() {
+  const b = costBase(), base = matN(b.days) * matN(b.hours) || 1;
+  const dep = matN(b.dep_month) / base, maint = matN(b.maint_month) / base, elec = matN(b.watts) / 1000 * matN(b.kwh);
+  return { b, base, dep, maint, elec, total: dep + maint + elec };
+}
+function printRate() { return rateParts().total; }
+function quoteRate() { return matN(costBase().quote_rate); }
+
+function renderBom() {
+  const prods = state.ownProducts || [];
+  const list = document.getElementById('bom-prod-list');
+  const ed = document.getElementById('bom-editor');
+  if (!prods.length) { list.innerHTML = ''; ed.innerHTML = '<div class="empty-state"><div class="empty-title">자체 제품(구분: 제품)이 없어요</div></div>'; return; }
+  list.innerHTML = prods.map(p => {
+    const has = (state.bom || []).some(b => b.product_id === p.id);
+    return `<button class="bom-prod${p.id === BOM_PID ? ' active' : ''}" onclick="bomSelect(${p.id})">${bulkEsc((p.name || '').replace(/^모듈랩\s*/, ''))}
+      <small>${bulkEsc(p.sku || '')} · 원가 ${matWon(p.cost_price)}${has ? '' : ' · BOM 없음'}</small></button>`;
+  }).join('');
+  if (!BOM_DRAFT || BOM_DRAFT.pid !== BOM_PID) BOM_DRAFT = bomDraftFor(BOM_PID);
+  bomRenderEditor();
+}
+function bomSelect(pid) {
+  if (BOM_DRAFT && BOM_DRAFT.dirty && !confirm('저장하지 않은 BOM 변경이 있어요. 버리고 다른 제품으로 갈까요?')) return;
+  BOM_PID = pid; BOM_DRAFT = null; renderBom();
+}
+
+function bomRenderEditor() {
+  const d = BOM_DRAFT, p = (state.ownProducts || []).find(x => x.id === d.pid);
+  const mats = (state.materials || []).filter(m => m.active !== false);
+  const matOpts = sel => '<option value="">부자재 선택…</option>' + MAT_KINDS.map(k => {
+    const its = mats.filter(m => m.kind === k.key);
+    return its.length ? `<optgroup label="${k.label}">${its.map(m => `<option value="${m.id}"${m.id === sel ? ' selected' : ''}>${bulkEsc(m.name)}${m.spec ? ' ' + bulkEsc(m.spec) : ''} (${matUnitPrice(m)})</option>`).join('')}</optgroup>` : '';
+  }).join('');
+  const inp = (path, val, extra = '') => `<input type="number" step="any" data-p="${path}" value="${val ?? ''}" ${extra}>`;
+  const unitOf = id => (state.materials || []).find(m => m.id === id)?.unit || '';
+  const rows = d.lines.map((l, i) => `<tr>
+      <td><select data-p="lines.${i}.material_id">${matOpts(l.material_id)}</select></td>
+      <td style="width:90px">${inp(`lines.${i}.qty`, l.qty)}</td><td style="width:34px">${bulkEsc(unitOf(l.material_id))}</td>
+      <td style="width:70px">${inp(`lines.${i}.loss_pct`, l.loss_pct)}</td>
+      <td class="num" id="bom-lc-${i}"></td><td style="width:30px"><button class="x" onclick="bomDel(${i})">×</button></td></tr>`).join('');
+
+  document.getElementById('bom-editor').innerHTML = `
+    <div class="bom-total">
+      <div><div style="font-size:12px;color:var(--fg-sub)">${bulkEsc(p?.name || '')} · 1개 기준 (부가세 포함)</div>
+        <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:baseline;margin:2px 0 4px">
+          <span><span style="font-size:12px;color:var(--fg-sub)">내부 원가</span> <b id="bom-total">—</b></span>
+          <span><span style="font-size:12px;color:var(--fg-sub)">외부 견적 기준가</span> <b id="bom-quote" style="font-size:17px;color:var(--fg)">—</b></span>
+          <a href="#" onclick="bomToggleFormula(event)" id="bom-formula-btn" style="font-size:12.5px;color:var(--accent);text-decoration:underline">${BOM_FORMULA_OPEN ? '산정식 닫기' : '산정식 보기'}</a>
+        </div>
+        <span style="font-size:12px;color:var(--fg-sub)">지금 ERP 매입가 ${matWon(p?.cost_price)} · 판매가 ${matWon(p?.sell_price)} <span id="bom-margin"></span></span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label class="btn btn-outline" title="견적서 양식의 '원가계산서' 시트에서 재료·부품·포장재·출력 시간을 읽어 채웁니다 (저장은 확인 후 직접)">견적서 엑셀로 채우기<input type="file" accept=".xlsx,.xls" hidden onchange="bomImportQuote(this)"></label>
+        <button class="btn btn-outline" onclick="saveBom(false)">저장</button>
+        <button class="btn btn-primary" onclick="saveBom(true)">저장 + 제품 원가에 반영</button>
+      </div>
+    </div>
+    <div class="asset-preview bom-formula" id="bom-formula" ${BOM_FORMULA_OPEN ? '' : 'hidden'} style="margin-bottom:12px"></div>
+    <div class="bom-sec"><div class="bom-sec-head">① 부자재 (필라멘트 · 부품 · 포장재)<span class="sum" id="bom-sum-mat"></span></div>
+      <table><thead><tr><th>부자재</th><th>1개에 드는 양</th><th></th><th>손실 %</th><th class="num">금액</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" style="color:var(--fg-faint)">아직 없음 — 아래에서 추가하거나 견적서 엑셀로 채우세요</td></tr>'}</tbody></table>
+      <button class="btn btn-outline btn-sm add" onclick="bomAddLine()">+ 부자재 추가</button>
+    </div>
+    <div class="bom-sec"><div class="bom-sec-head">② 출력비<span class="sum" id="bom-sum-print"></span></div>
+      <table><tbody><tr>
+        <td>출력 시간 (1개 기준, 분)</td><td style="width:110px">${inp('print_minutes', d.print_minutes)}</td>
+        <td class="num" style="width:220px">× 내부 시간당 ${matWon(printRate())}</td>
+      </tr></tbody></table>
+    </div>
+    <div class="bom-note">필라멘트는 g, 부품·포장재는 개수로 넣습니다. 한 판에 여러 개를 뽑으면 출력 시간과 필라멘트를 개수로 나눈 값을 넣으세요.
+      부자재 단가는 '부자재 재고' 탭에서 고치면 여기에 바로 반영됩니다. 택배비는 비용 정산에서 주문당 따로 빠지므로 넣지 않습니다.</div>
+    ${(() => { const rp = rateParts(), b = rp.b, ci = (k, label, unit) => `<tr><td>${label}</td><td style="width:120px"><input type="number" step="any" id="cb-${k}" value="${b[k]}"></td><td style="width:70px;color:var(--fg-faint)">${unit}</td></tr>`;
+      return `<div class="bom-sec"><div class="bom-sec-head">시간당 출력비 산정 (모든 제품 공통)<span class="sum">내부 ${matWon(rp.total)} · 외부 ${matWon(quoteRate())}</span></div>
+      <table><tbody>
+        ${ci('dep_month', '프린터 감가상각 (한 달)', '원')}
+        ${ci('maint_month', '장비 유지보수비 (한 달)', '원')}
+        ${ci('watts', '프린터 소비전력', 'W')}
+        ${ci('kwh', '전기 단가', '원/kWh')}
+        ${ci('days', '기준 근무일 (한 달)', '일')}
+        ${ci('hours', '하루 기준 시간', '시간')}
+        ${ci('quote_rate', '외부 견적 시간당 단가 (마진 포함)', '원')}
+      </tbody></table>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 10px 10px;flex-wrap:wrap">
+        <span class="bom-note" style="margin:0">기본값은 TRX4 견적서 원가계산서의 H2C 숫자 · 실제 가동과 상관없이 근무일 × 하루 시간을 기준으로 나눔</span>
+        <button class="btn btn-outline btn-sm" onclick="saveCostSettings()">기준 저장</button>
+      </div></div>`; })()}`;
+
+  const ed = document.getElementById('bom-editor');
+  ed.oninput = ed.onchange = e => {
+    const path = e.target.dataset && e.target.dataset.p;
+    if (!path) return;
+    const keys = path.split('.');
+    let o = BOM_DRAFT;
+    for (let k = 0; k < keys.length - 1; k++) o = o[keys[k]];
+    const last = keys[keys.length - 1];
+    if (last === 'material_id') { o[last] = Number(e.target.value) || null; if (e.type === 'change') { BOM_DRAFT.dirty = true; bomRenderEditor(); return; } }
+    else if (e.target.type === 'number') o[last] = e.target.value === '' ? '' : Number(e.target.value);
+    else o[last] = e.target.value;
+    BOM_DRAFT.dirty = true;
+    bomRecalc();
+  };
+  bomRecalc();
+}
+function bomRecalc() {
+  const d = BOM_DRAFT, r = bomCalc(d);
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = matWon(v); };
+  d.lines.forEach((l, i) => set('bom-lc-' + i, r.lineCost(l)));
+  set('bom-sum-mat', r.materials); set('bom-sum-print', r.print); set('bom-total', r.total); set('bom-quote', r.quote);
+  const p = (state.ownProducts || []).find(x => x.id === d.pid);
+  const sell = Number(p?.sell_price) || 0;
+  const m = document.getElementById('bom-margin');
+  if (m) m.textContent = sell ? `· 이 원가면 이익 ${matWon(sell / 1.1 - r.total / 1.1)} (${Math.round((1 - r.total / sell) * 100)}%)` : '';
+  const fx = document.getElementById('bom-formula');
+  if (fx && BOM_FORMULA_OPEN) fx.innerHTML = bomFormulaHtml(d, r);
+}
+
+// 산정식: 숫자가 어떻게 나왔는지 줄마다 보여 줌
+function bomFormulaHtml(d, r) {
+  const won = matWon, n2 = v => Number(v || 0).toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+  const rp = rateParts(), b = rp.b, min = matN(d.print_minutes);
+  const lines = d.lines.map(l => {
+    const mt = (state.materials || []).find(x => x.id === l.material_id);
+    if (!mt) return '';
+    const loss = matN(l.loss_pct) ? ` × (1 + ${n2(l.loss_pct)}%)` : '';
+    return `<div style="padding-left:14px">· ${bulkEsc(mt.name)}${mt.spec ? ' ' + bulkEsc(mt.spec) : ''}: ${n2(l.qty)}${bulkEsc(mt.unit)}${loss} × ${n2(mt.unit_cost)}원/${bulkEsc(mt.unit)} = <b>${won(r.lineCost(l))}</b>${mt.input_vat_included === false ? ' <span style="color:var(--fg-faint)">(부가세 별도 가격 ×1.1)</span>' : ''}</div>`;
+  }).join('');
+  return `<div style="font-weight:700;margin-bottom:4px">내부 원가 = ① 부자재 + ② 출력비</div>
+    <div>① 부자재 = <b>${won(r.materials)}</b></div>${lines || '<div style="padding-left:14px;color:var(--fg-faint)">· 없음</div>'}
+    <div style="margin-top:4px">② 출력비 = ${n2(min)}분 ÷ 60 × 내부 시간당 ${won(rp.total)} = <b>${won(r.print)}</b></div>
+    <div style="padding-left:14px">내부 시간당 ${won(rp.total)} = 감가상각 ${won(b.dep_month)} ÷ ${n2(rp.base)}시간 (${n2(b.days)}일 × ${n2(b.hours)}시간) <b>${won(rp.dep)}</b>
+      + 유지보수 ${won(b.maint_month)} ÷ ${n2(rp.base)}시간 <b>${won(rp.maint)}</b>
+      + 전기 ${n2(b.watts)}W ÷ 1000 × ${n2(b.kwh)}원/kWh <b>${won(rp.elec)}</b></div>
+    <div style="margin-top:4px">합계 = ${won(r.materials)} + ${won(r.print)} = <b>${won(r.total)}</b></div>
+    <div style="font-weight:700;margin:10px 0 4px;padding-top:8px;border-top:1px solid var(--border)">외부 견적 기준가 = ① 부자재 + 출력 시간 × 외부 시간당</div>
+    <div>${won(r.materials)} + ${n2(min)}분 ÷ 60 × ${won(quoteRate())} (${won(r.quotePrint)}) = <b>${won(r.quote)}</b></div>
+    <div style="color:var(--fg-faint);margin-top:4px">외부 시간당 ${won(quoteRate())}은 마진이 들어간 판매 단가(국내 출력대행 시세 3,000~4,000원) — 출력비에는 이익률을 다시 곱하지 않고, 모델링비·부자재 마진·부가세·배송비는 견적서에서 따로 붙임</div>`;
+}
+function bomToggleFormula(e) {
+  if (e) e.preventDefault();
+  BOM_FORMULA_OPEN = !BOM_FORMULA_OPEN;
+  document.getElementById('bom-formula').hidden = !BOM_FORMULA_OPEN;
+  document.getElementById('bom-formula-btn').textContent = BOM_FORMULA_OPEN ? '산정식 닫기' : '산정식 보기';
+  bomRecalc();
+}
+function bomAddLine() {
+  const first = (state.materials || []).find(m => m.active !== false);
+  if (!first) { toast('먼저 부자재 재고 탭에서 부자재를 등록하세요'); return; }
+  BOM_DRAFT.lines.push({ material_id: first.id, qty: 1, loss_pct: 0, memo: '' });
+  BOM_DRAFT.dirty = true; bomRenderEditor();
+}
+function bomDel(i) { BOM_DRAFT.lines.splice(i, 1); BOM_DRAFT.dirty = true; bomRenderEditor(); }
+
+async function saveCostSettings() {
+  const v = {};
+  for (const k of Object.keys(COST_BASE)) {
+    const x = Number(document.getElementById('cb-' + k).value);
+    if (!(x >= 0)) { toast('숫자를 확인하세요'); return; }
+    v[k] = x;
+  }
+  if (!(v.days * v.hours > 0)) { toast('근무일과 하루 시간은 0보다 커야 해요'); return; }
+  const { error } = await sb.from('app_settings').upsert({ key: 'cost', value: v, updated_at: new Date().toISOString() });
+  if (error) { toast('저장 실패: ' + error.message); return; }
+  state.costSettings = v;
+  bomRenderEditor();
+  toast(`기준 저장 ✓ 내부 시간당 ${matWon(printRate())} · 외부 ${matWon(quoteRate())} (제품 원가는 각 제품에서 '반영'을 눌러야 바뀜)`, 4500);
+}
+
+async function saveBom(apply) {
+  const d = BOM_DRAFT;
+  const lines = d.lines.filter(l => l.material_id && matN(l.qty) > 0);
+  const r = bomCalc(d);
+  try {
+    const { error: delErr } = await sb.from('bom_items').delete().eq('product_id', d.pid);
+    if (delErr) throw new Error(delErr.message);
+    if (lines.length) await sbPost('bom_items', lines.map((l, i) => ({ product_id: d.pid, material_id: l.material_id, qty: matN(l.qty), loss_pct: matN(l.loss_pct), sort: i, memo: l.memo || null })));
+    const patch = { cost_profile: { print_minutes: matN(d.print_minutes), memo: d.memo || null } };
+    if (apply) patch.cost_price = Math.round(r.total);
+    const { error } = await sb.from('products').update(patch).eq('id', d.pid);
+    if (error) throw new Error(error.message);
+    if (apply) { state.loaded.products = false; state.loaded.inventory = false; state.loaded.overview = false; }
+    await loadMaterials();
+    toast(apply ? `저장 · 제품 원가 ${matWon(r.total)}로 반영 ✓` : 'BOM을 저장했습니다 ✓');
+  } catch (e) { toast('오류: ' + e.message); }
+}
+
+// ── 견적서 엑셀 → BOM 채우기 ──
+// 사장님 견적서 양식 '원가계산서' 시트: ①~⑥ 제목 줄 아래에 표. 금액(8번째 칸)이 0보다 큰 재료·부품만 BOM으로.
+// 없는 부자재는 견적서 이름 그대로 새로 등록 (단가는 견적서 값, 부가세 포함으로 두고 메모에 '확인 필요')
+function loadSheetJs() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((ok, bad) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = () => ok(window.XLSX);
+    s.onerror = () => bad(new Error('엑셀 읽기 도구를 불러오지 못했어요 (인터넷 연결 확인)'));
+    document.head.appendChild(s);
+  });
+}
+function parseQuoteSheet(rows) {
+  const out = { filament: [], parts: [], power: [], labor: [], expenses: [], overhead: [], kwh: null, title: '' };
+  let sec = null;
+  const num = v => { const n = Number(String(v ?? '').replace(/,/g, '')); return isNaN(n) ? 0 : n; };
+  const str = v => String(v ?? '').trim();
+  for (const r of rows) {
+    const a = str(r[0]);
+    if (str(r[1]) === '작업명 / 품목') out.title = str(r[2]);
+    const m = a.match(/^([①②③④⑤⑥])/);
+    if (m) { sec = '①②③④⑤⑥'.indexOf(m[1]); continue; }
+    if (sec == null || typeof r[0] !== 'number' || !str(r[1])) continue;   // 번호 있는 줄만
+    if (sec === 0 && num(r[7]) > 0) out.filament.push({ name: str(r[1]), per_kg: num(r[2]), grams: num(r[3]), loss: num(r[4]) });
+    if (sec === 1 && num(r[7]) > 0) out.parts.push({ name: str(r[1]), vendor: str(r[2]), price: num(r[3]), qty: num(r[4]) });
+    if (sec === 2) { out.power.push({ name: str(r[1]), watts: num(r[2]), minutes: num(r[3]) * 60 + num(r[4]) }); if (num(r[5])) out.kwh = num(r[5]); }
+    if (sec === 3) out.labor.push({ task: str(r[1]), rate: num(r[2]), minutes: (num(r[3]) * 60 + num(r[4])) * (r[5] === '' ? 1 : num(r[5])) });
+    if (sec === 4) out.expenses.push({ name: [str(r[1]), str(r[2])].filter(Boolean).join(' ('), amount: num(r[7]) || num(r[4]) * num(r[5]), include: !/운송|택배비|배송/.test(str(r[1])) });
+    if (sec === 5) out.overhead.push({ name: str(r[1]), per_hour: Math.round(num(r[6]) * 100) / 100, hours: num(r[5]) });
+  }
+  out.expenses.forEach(x => { if (x.name.includes(' (')) x.name += ')'; });
+  return out;
+}
+async function bomImportQuote(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file || !BOM_DRAFT) return;
+  try {
+    const XLSX = await loadSheetJs();
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const sheet = wb.Sheets['원가계산서'];
+    if (!sheet) { toast("이 파일에 '원가계산서' 시트가 없어요 — 견적서 양식 파일인지 확인해 주세요"); return; }
+    const q = parseQuoteSheet(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }));
+    const p = (state.ownProducts || []).find(x => x.id === BOM_DRAFT.pid);
+    // 간소화(11-21): 프린터 가동 분만 출력 시간으로, 포장재(운송비 제외)는 부자재로. 인건비·전력·고정비는 쓰지 않음
+    const printMin = q.power.filter(x => !/AMS|건조|EinScan|RIGEL|스캐너/i.test(x.name)).reduce((s, x) => s + x.minutes, 0);
+    const packs = q.expenses.filter(x => x.include && x.amount > 0);
+    if (!confirm(`'${file.name}' (${q.title || '품목명 없음'}) 내용으로\n[${p?.name}] BOM을 채울까요?\n\n필라멘트 ${q.filament.length}개 · 부품 ${q.parts.length}개 · 포장재 ${packs.length}개 · 출력 ${printMin}분\n(지금 화면의 BOM은 바뀌고, 저장은 확인 후 직접 눌러야 해요)`)) return;
+
+    // 부자재 찾기: 같은 이름 + 같은 단가 → 같은 이름 하나뿐 → 없으면 새로 등록
+    const norm = s => String(s || '').replace(/[\s\[\]()（）*×xX,]/g, '').toLowerCase();
+    const mats = state.materials || [];
+    const find = (name, unitCost, kind) => {
+      const same = mats.filter(m => m.kind === kind && (norm(m.name + (m.spec || '')) === norm(name) || norm(m.name) === norm(name)));
+      return same.find(m => Math.abs(Number(m.unit_cost) - unitCost) < 0.01) || (same.length === 1 ? same[0] : null);
+    };
+    const toCreate = [];
+    const want = [
+      ...q.filament.map(f => ({ kind: 'filament', name: f.name, unit: 'g', unit_cost: f.per_kg / 1000, input_price: f.per_kg, input_qty: 1000, qty: f.grams, loss: f.loss })),
+      ...q.parts.map(x => ({ kind: 'part', name: x.name, unit: '개', unit_cost: x.price, input_price: x.price, input_qty: 1, qty: x.qty, loss: 0, vendor: x.vendor })),
+      ...packs.map(x => ({ kind: 'packaging', name: x.name, unit: '개', unit_cost: x.amount, input_price: x.amount, input_qty: 1, qty: 1, loss: 0 })),
+    ];
+    for (const w of want) { w.mat = find(w.name, w.unit_cost, w.kind); if (!w.mat) toCreate.push(w); }
+    if (toCreate.length) {
+      const made = await sbPost('materials', toCreate.map(w => ({
+        kind: w.kind, name: w.name, unit: w.unit, unit_cost: matRound(w.unit_cost), input_price: w.input_price, input_qty: w.input_qty,
+        input_vat_included: true, memo: `견적서(${file.name})에서 옮김 — 부가세 포함/별도 확인 필요${w.vendor ? ' · ' + w.vendor : ''}`,
+      })));
+      made.forEach((m, i) => { toCreate[i].mat = m; state.materials.push(m); });
+    }
+    BOM_DRAFT.lines = want.map(w => ({ material_id: w.mat.id, qty: w.qty, loss_pct: w.loss, memo: '견적서' }));
+    BOM_DRAFT.print_minutes = printMin;
+    BOM_DRAFT.dirty = true;
+    bomRenderEditor();
+    toast(`견적서로 채웠어요${toCreate.length ? ` · 새 부자재 ${toCreate.length}개 등록` : ''} — 확인 후 저장하세요`, 5000);
+  } catch (e) { toast('견적서 읽기 실패: ' + e.message, 5000); }
+}
+
+// ── 생산 기록 ──
+function openProdRun(pid) {
+  const sel = document.getElementById('pr-product');
+  sel.innerHTML = (state.ownProducts || []).map(p => `<option value="${p.id}">${bulkEsc(p.name)}</option>`).join('');
+  sel.value = pid || BOM_PID || (state.ownProducts || [])[0]?.id || '';
+  document.getElementById('pr-qty').value = 1;
+  document.getElementById('pr-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('pr-memo').value = '';
+  prodRunPreview();
+  openOverlay('overlay-prodrun');
+}
+function prodRunCalc() {
+  const pid = Number(document.getElementById('pr-product').value);
+  const qty = matN(document.getElementById('pr-qty').value);
+  const d = bomDraftFor(pid);           // 저장된 BOM 기준 (저장 안 한 편집은 반영 안 됨)
+  const r = bomCalc(d);
+  const needs = d.lines.map(l => {
+    const m = (state.materials || []).find(x => x.id === l.material_id);
+    const need = qty * matN(l.qty) * (1 + matN(l.loss_pct) / 100);
+    return { m, need, short: m ? Number(m.stock) < need : true };
+  });
+  return { pid, qty, d, r, needs };
+}
+function prodRunPreview() {
+  const { qty, r, needs } = prodRunCalc();
+  const box = document.getElementById('pr-preview');
+  if (!needs.length) { box.innerHTML = '⚠ 이 제품은 BOM이 없어서 부자재가 줄지 않고 <b>제품 재고만</b> 늘어납니다. (BOM · 원가 탭에서 먼저 만들어 주세요)'; return; }
+  box.innerHTML = `1개 원가 <b>${matWon(r.total)}</b> · ${qty}개 합계 <b>${matWon(r.total * qty)}</b><br>쓰는 부자재:<br>` +
+    needs.map(n => n.m ? `· ${bulkEsc(n.m.name)}${n.m.spec ? ' ' + bulkEsc(n.m.spec) : ''} ${matQty(Math.round(n.need * 100) / 100, n.m.unit)} <span class="${n.short ? 'short' : ''}">(재고 ${matQty(n.m.stock, n.m.unit)}${n.short ? ' — 모자람' : ''})</span>` : '· (지워진 부자재)').join('<br>');
+}
+async function saveProdRun() {
+  const { pid, qty, d, r, needs } = prodRunCalc();
+  if (!pid || !(qty > 0)) { toast('제품과 수량을 확인하세요'); return; }
+  if (needs.some(n => n.short) && !confirm('모자라는 부자재가 있어요. 그래도 기록할까요? (재고가 마이너스로 표시됩니다)')) return;
+  try {
+    await sbPost('production_runs', {
+      product_id: pid, qty, made_at: document.getElementById('pr-date').value || null,
+      unit_cost: Math.round(r.total),
+      cost_detail: { filament: Math.round(r.filament), parts: Math.round(r.parts), packaging: Math.round(r.packaging), print: Math.round(r.print), print_minutes: matN(d.print_minutes), print_rate: printRate(), lines: d.lines },
+      memo: document.getElementById('pr-memo').value.trim() || null,
+    });
+    closeOverlay('overlay-prodrun');
+    state.loaded.inventory = false; state.loaded.products = false; state.loaded.overview = false;
+    MAT_TAB = 'runs';
+    await loadMaterials();
+    toast(`생산 ${qty}개 기록 · 부자재 차감 · 제품 재고 +${qty} ✓`);
+  } catch (e) { toast('오류: ' + e.message); }
+}
+function renderRuns() {
+  const runs = state.runs || [];
+  const tbody = document.getElementById('runs-tbody');
+  const pname = id => (state.ownProducts || []).find(p => p.id === id)?.name || '#' + id;
+  if (!runs.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🏭</div><div class="empty-title">생산 기록 없음</div>
+      <div class="empty-desc">제품을 만들면 기록하세요 — BOM대로 부자재가 줄고 제품 재고가 늘어납니다</div>
+      <button class="btn btn-primary" onclick="openProdRun()">+ 생산 기록</button></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = runs.map(r => `<tr>
+    <td>${r.made_at || '—'}</td><td>${bulkEsc(pname(r.product_id))}</td>
+    <td class="td-right">${Number(r.qty)}개</td><td class="td-right td-mono">${matWon(r.unit_cost)}</td>
+    <td class="td-right td-mono">${matWon((Number(r.unit_cost) || 0) * Number(r.qty))}</td>
+    <td>${bulkEsc(r.memo || '')}</td>
+    <td><button class="btn btn-outline btn-sm" onclick="deleteProdRun(${r.id})">되돌리기</button></td></tr>`).join('');
+}
+async function deleteProdRun(id) {
+  const r = (state.runs || []).find(x => x.id === id);
+  if (!r || !confirm(`이 생산 기록(${r.made_at} · ${r.qty}개)을 지울까요?\n쓴 부자재는 재고로 돌아오고, 제품 재고는 ${r.qty}개 줄어듭니다.`)) return;
+  const { error } = await sb.from('production_runs').delete().eq('id', id);
+  if (error) { toast('실패: ' + error.message); return; }
+  state.loaded.inventory = false; state.loaded.products = false;
+  await loadMaterials();
+  toast('생산 기록을 되돌렸습니다');
 }
 
 async function loadOrders() {
@@ -4792,7 +5649,10 @@ const INTAKE_DEFAULTS = { resale: { imweb: true, naver: true, toss: true, ebay: 
                           own:    { imweb: true, naver: true, toss: true, ebay: true } };
 function intakeType() { return document.querySelector('input[name="intake-type"]:checked').value; }
 function intakeTypeChanged() {
-  const def = INTAKE_DEFAULTS[intakeType()];
+  const t = intakeType();
+  // 부자재: 쇼핑몰에 올리지 않고 '부자재 · BOM' 재고에만 입고 (달러 구매는 처리할 때 그날 환율로 원화 계산)
+  document.getElementById('intake-ch-group').hidden = t === 'material';
+  const def = INTAKE_DEFAULTS[t] || { imweb: false, naver: false, toss: false, ebay: false };
   for (const [k] of INTAKE_CHANNELS) document.getElementById('intake-ch-' + k).checked = def[k];
 }
 function intakeChannels() {
@@ -4826,8 +5686,9 @@ function intakeClear() {
 
 async function intakeSubmit() {
   if (!intake.files.length) { toast('주문서 파일을 먼저 선택하세요'); return; }
-  const channels = intakeChannels();
-  if (!Object.values(channels).some(Boolean) && !confirm('올릴 곳을 하나도 고르지 않았어요. ERP에만 반영할까요?')) return;
+  const isMat = intakeType() === 'material';
+  const channels = isMat ? null : intakeChannels();
+  if (!isMat && !Object.values(channels).some(Boolean) && !confirm('올릴 곳을 하나도 고르지 않았어요. ERP에만 반영할까요?')) return;
   const btn = document.getElementById('intake-submit');
   btn.disabled = true;
   try {
@@ -4865,11 +5726,13 @@ function intakeSummary(r) {
   const log = res.log || [];
   const ok = log.filter(l => l.ok).length, fail = log.filter(l => !l.ok);
   const parts = [];
-  if (res.products) parts.push(`상품 ${res.products.length}개`);
+  if (res.materials) parts.push(`부자재 ${res.materials.length}종 입고`);
+  if (res.products && res.products.length) parts.push(`상품 ${res.products.length}개`);
   if (log.length) parts.push(`성공 ${ok} · 실패 ${fail.length}`);
   let html = bulkEsc(parts.join(' / ') || res.message || '');
   if (fail.length) html += '<br><span style="color:var(--danger);font-size:12px">' + fail.slice(0, 4).map(f => bulkEsc(`${f.sku} [${f.channel}] ${f.msg}`).slice(0, 120)).join('<br>') + '</span>';
-  const memos = (res.products || []).filter(p => p.memo).map(p => `${p.sku}: ${p.memo}`);
+  const memos = [...(res.products || []).filter(p => p.memo).map(p => `${p.sku}: ${p.memo}`),
+                 ...(res.materials || []).filter(m => m.memo).map(m => `${m.name}: ${m.memo}`)];
   if (memos.length) html += '<br><span style="color:var(--warn);font-size:12px">확인 필요 — ' + bulkEsc(memos.slice(0, 4).join(' / ')) + '</span>';
   return html;
 }
@@ -4892,12 +5755,12 @@ async function loadIntake() {
       ? `<button class="btn btn-primary btn-sm" onclick="intakeEbayPublish(${r.id})">eBay 게시 (${ebayWait})</button>` : '';
     // 예전 업로드(채널 기록 없음)는 아임웹·스마트스토어·토스
     const ch = r.channels || INTAKE_DEFAULTS.resale;
-    const chText = INTAKE_CHANNELS.filter(([k]) => ch[k]).map(([, n]) => n).join(' · ') || 'ERP만';
+    const chText = r.product_type === 'material' ? '부자재 재고' : (INTAKE_CHANNELS.filter(([k]) => ch[k]).map(([, n]) => n).join(' · ') || 'ERP만');
     return `<tr>
       <td>${r.created_at ? new Date(new Date(r.created_at).getTime() + 9 * 3600000).toISOString().slice(0, 16).replace('T', ' ') : '—'}</td>
       <td class="td-mono">${bulkEsc(r.folder_name || '—')}</td>
       <td>${bulkEsc(r.supplier || '—')}</td>
-      <td style="font-size:12px">${r.product_type === 'own' ? '<span class="badge badge-blue">제품</span> ' : ''}${bulkEsc(chText)}</td>
+      <td style="font-size:12px">${r.product_type === 'own' ? '<span class="badge badge-blue">제품</span> ' : r.product_type === 'material' ? '<span class="badge badge-gray">부자재</span> ' : ''}${bulkEsc(chText)}</td>
       <td style="font-size:12px">${(r.files || []).map(f => `<a href="#" onclick="intakeDownload('${bulkEsc(f.path)}');return false">${bulkEsc(f.name)}</a>`).join('<br>')}</td>
       <td><span style="color:${color};font-weight:600">${label}</span></td>
       <td style="font-size:13px;max-width:420px">${intakeSummary(r)}</td>
